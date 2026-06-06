@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="40" fill="#070810"/>
+  <rect width="192" height="192" rx="40" fill="url(#bg)"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="192" y2="192" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0d0f1a"/>
+      <stop offset="100%" stop-color="#070810"/>
+    </linearGradient>
+  </defs>
+  <!-- Chart line -->
+  <polyline points="24,140 52,110 76,118 100,72 124,84 148,52 168,60" fill="none" stroke="#c6f135" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+  <!-- Dot on peak -->
+  <circle cx="148" cy="52" r="7" fill="#c6f135"/>
+  <!-- CD letters -->
+  <text x="96" y="175" font-family="Arial,sans-serif" font-size="22" font-weight="900" fill="#c6f135" text-anchor="middle" letter-spacing="4">CRYPTODESK</text>
+</svg>

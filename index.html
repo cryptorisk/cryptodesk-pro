@@ -1001,22 +1001,71 @@ const DEMO_COINS = ['BTC','ETH','SOL','BNB','AVAX'];
 
 // ── Demo persistence helpers ──
 function saveDemo(){
-  try{localStorage.setItem('cdp_demo',JSON.stringify({
+  const key=window._currentDemoKey||'cdp_demo';
+  try{localStorage.setItem(key,JSON.stringify({
     capital:DEMO.capital,
     positions:DEMO.positions,
     history:DEMO.history.slice(0,50),
-    selectedCoin:DEMO.selectedCoin
+    selectedCoin:DEMO.selectedCoin,
+    savedAt:Date.now()
   }));}catch(e){}
 }
+
 function loadDemo(){
+  const key=window._currentDemoKey||'cdp_demo';
   try{
-    const d=localStorage.getItem('cdp_demo');
+    const d=localStorage.getItem(key);
     if(d){
       const p=JSON.parse(d);
       DEMO.capital=p.capital||DEMO.startCapital;
-      DEMO.positions=p.positions||[];
       DEMO.history=p.history||[];
       DEMO.selectedCoin=p.selectedCoin||null;
+
+      // Restore positions with simulated elapsed ticks
+      const elapsed=p.savedAt?Math.floor((Date.now()-p.savedAt)/1200):0;
+      DEMO.positions=(p.positions||[]).map(pos=>{
+        if(!DEMO.prices[pos.sym]){DEMO.prices[pos.sym]=pos.entry;DEMO.ticks[pos.sym]=[pos.entry];}
+        return pos;
+      });
+
+      if(DEMO.positions.length>0&&elapsed>0){
+        const ticks=Math.min(elapsed,500);
+        for(let t=0;t<ticks;t++){
+          DEMO_COINS.forEach(sym=>{
+            const coin=S.myCoins.find(c=>c.sym===sym)||{vol:5};
+            const v=(coin.vol||5)/100/100;
+            const drift=(Math.random()-0.48)*v;
+            DEMO.prices[sym]=(DEMO.prices[sym]||1000)*(1+drift);
+            if(!DEMO.ticks[sym])DEMO.ticks[sym]=[];
+            DEMO.ticks[sym].push(DEMO.prices[sym]);
+            if(DEMO.ticks[sym].length>60)DEMO.ticks[sym].shift();
+          });
+          const toClose=[];
+          DEMO.positions.forEach(pos=>{
+            const price=DEMO.prices[pos.sym];if(!price)return;
+            const isLong=pos.dir==='long';
+            const pnlPct=isLong?(price-pos.entry)/pos.entry:(pos.entry-price)/pos.entry;
+            if(pnlPct>=pos.tpPct){pos.exit=price;pos.pnl=pos.posSize*pnlPct;pos.result='win';pos.closeReason='TP Hit ✅ (while away)';toClose.push(pos);}
+            else if(pnlPct<=-pos.slPct){pos.exit=price;pos.pnl=-Math.abs(pos.slAmt);pos.result='loss';pos.closeReason='SL Hit ❌ (while away)';toClose.push(pos);}
+          });
+          toClose.forEach(pos=>{
+            DEMO.capital+=pos.pnl;
+            DEMO.history.unshift({...pos,closedAt:'While away'});
+            DEMO.positions=DEMO.positions.filter(p=>p.id!==pos.id);
+          });
+          if(DEMO.positions.length===0)break;
+        }
+        // Notify user
+        const away=DEMO.history.filter(h=>h.closeReason&&h.closeReason.includes('while away'));
+        if(away.length>0){
+          const w=away.filter(h=>h.result==='win').length;
+          const l=away.filter(h=>h.result==='loss').length;
+          setTimeout(()=>toast(`🎮 While away: ${w?w+' TP ✅':''} ${l?l+' SL ❌':''}`),1500);
+        }
+        if(DEMO.positions.length>0){
+          setTimeout(()=>toast(`📊 ${DEMO.positions.length} demo position${DEMO.positions.length>1?'s':''} still running`),2500);
+        }
+      }
     }
   }catch(e){}
 }
@@ -1083,10 +1132,9 @@ function checkDemoPositions(){
     DEMO.capital += pos.pnl;
     DEMO.history.unshift({...pos, closedAt: new Date().toLocaleTimeString()});
     DEMO.positions = DEMO.positions.filter(p=>p.id!==pos.id);
-    // Toast notification
-    const icon = pos.result==='win'?'💰':'💸';
-    toast(`${icon} Demo ${pos.sym} ${pos.closeReason} → ${pos.pnl>=0?'+':''}$${pos.pnl.toFixed(0)}`);
+    toast(`${pos.result==='win'?'💰':'💸'} Demo ${pos.sym} ${pos.closeReason} → ${pos.pnl>=0?'+':''}$${pos.pnl.toFixed(0)}`);
   });
+  if(closed.length>0) saveDemo();
 }
 
 function openDemoPosition(sym, dir){
@@ -1114,6 +1162,7 @@ function openDemoPosition(sym, dir){
     pnl: 0, result:'open', exit:null, closeReason:null
   };
   DEMO.positions.push(pos);
+  saveDemo();
   toast(`🎮 Demo ${dir.toUpperCase()} ${sym} opened @$${fmtPrice(price)}`);
   renderDemoUI();
 }
@@ -1130,6 +1179,7 @@ function closeDemoPosition(id){
   DEMO.capital+=pos.pnl;
   DEMO.history.unshift({...pos, closedAt:new Date().toLocaleTimeString()});
   DEMO.positions=DEMO.positions.filter(p=>p.id!==id);
+  saveDemo();
   toast(`🎮 Demo ${pos.sym} closed → ${pos.pnl>=0?'+':''}$${pos.pnl.toFixed(0)}`);
   renderDemoUI();
 }
@@ -3358,6 +3408,12 @@ function enterApp(user){
   const skipGuide=localStorage.getItem('cdp_guide_skip_'+user.uid);
   if(!profileDone){ profileMode=true;showProfileSetup();document.getElementById('guide-overlay').style.display='flex'; }
   else if(!skipGuide){ profileMode=false;guideCurrentStep=0;renderGuideStep();document.getElementById('guide-overlay').style.display='flex'; }
+
+  // Save demo on page close
+  window.addEventListener('beforeunload', ()=>{
+    saveCurrentUserData();
+    saveDemo();
+  });
 
   // Start price fetching
   fetchMarket(false);

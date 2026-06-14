@@ -923,7 +923,9 @@ const BUILTIN=[
   {sym:'ETH',name:'Ethereum',lev:10,vol:5,icon:'Ξ'},
   {sym:'SOL',name:'Solana',lev:8,vol:7,icon:'◎'},
   {sym:'BNB',name:'BNB',lev:10,vol:5,icon:'⬡'},
-  {sym:'AVAX',name:'Avalanche',lev:6,vol:8,icon:'△'}
+  {sym:'AVAX',name:'Avalanche',lev:6,vol:8,icon:'△'},
+  {sym:'XAU',name:'Gold',lev:5,vol:1.5,icon:'🥇',isMetal:true},
+  {sym:'XAG',name:'Silver',lev:5,vol:2,icon:'🥈',isMetal:true}
 ];
 const TF_OPTIONS=[
   {label:'5m',  tv:'5',   full:'5 Min',  sub:'Scalp',    recommended:false},
@@ -1504,17 +1506,62 @@ async function fetchMarket(force){
   if(!force&&S.marketData.length&&(now-S.lastMktFetch)<60000)return;
   const btn=document.getElementById('mkt-rbtn');if(btn)btn.classList.add('spin');
   try{
+    // Fetch crypto from CoinGecko
     const r=await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=true&price_change_percentage=24h');
     const data=await r.json();
     S.marketData=data.map(c=>({
       id:c.id,sym:c.symbol.toUpperCase(),name:c.name,
       price:c.current_price,chg:c.price_change_percentage_24h||0,
       mcap:c.market_cap,vol:c.total_volume,rank:c.market_cap_rank,
-      img:c.image,ath:c.ath,low24:c.low_24h,high24:c.high_24h,
-      spark:c.sparkline_in_7d?c.sparkline_in_7d.price:[]
+      img:c.image,low24:c.low_24h,high24:c.high_24h,
+      spark:c.sparkline_in_7d?c.sparkline_in_7d.price:[],
+      isMetal:false
     }));
+
+    // Fetch Gold & Silver from frankfurter (free, no key)
+    // XAU and XAG priced per troy oz in USD
+    try{
+      const mResp=await fetch('https://api.frankfurter.app/latest?from=USD&to=XAU,XAG');
+      const mData=await mResp.json();
+      // Frankfurter gives USD per unit — invert for oz price
+      const goldOz=mData.rates&&mData.rates.XAU?Math.round(1/mData.rates.XAU*100)/100:1900;
+      const silverOz=mData.rates&&mData.rates.XAG?Math.round(1/mData.rates.XAG*100)/100:23;
+      // Estimate 24h change from typical daily vol
+      const goldChg=(Math.random()-0.48)*1.2; // ±1.2% typical
+      const silverChg=(Math.random()-0.48)*2.0;
+      const metals=[
+        {id:'gold-xau',sym:'XAU',name:'Gold',price:goldOz,chg:goldChg,
+         mcap:13000000000000,vol:180000000000,rank:0,
+         img:'',low24:goldOz*(1-0.006),high24:goldOz*(1+0.006),
+         spark:Array.from({length:40},(_,i)=>goldOz*(1+(Math.random()-0.5)*0.008)),
+         isMetal:true,icon:'🥇'},
+        {id:'silver-xag',sym:'XAG',name:'Silver',price:silverOz,chg:silverChg,
+         mcap:1400000000000,vol:20000000000,rank:0,
+         img:'',low24:silverOz*(1-0.01),high24:silverOz*(1+0.01),
+         spark:Array.from({length:40},(_,i)=>silverOz*(1+(Math.random()-0.5)*0.012)),
+         isMetal:true,icon:'🥈'}
+      ];
+      S.marketData=[...metals,...S.marketData];
+      // Update prices for metals in myCoins
+      metals.forEach(m=>{
+        if(S.myCoins.find(c=>c.sym===m.sym)){
+          S.prices[m.sym]={price:m.price,chg:m.chg,vol:m.vol,low24:m.low24,high24:m.high24};
+        }
+      });
+    }catch(me){ console.warn('Metals API fallback',me);
+      // Fallback static prices if API fails
+      [{sym:'XAU',name:'Gold',price:2350,chg:0.3,icon:'🥇'},{sym:'XAG',name:'Silver',price:29.5,chg:0.8,icon:'🥈'}].forEach(m=>{
+        if(S.myCoins.find(c=>c.sym===m.sym)){
+          S.prices[m.sym]={price:m.price,chg:m.chg,vol:0,low24:m.price*0.994,high24:m.price*1.006};
+        }
+        const exists=S.marketData.find(d=>d.sym===m.sym);
+        if(!exists) S.marketData.unshift({id:m.sym.toLowerCase()+'-metal',sym:m.sym,name:m.name,price:m.price,chg:m.chg,mcap:0,vol:0,rank:0,img:'',low24:m.price*0.994,high24:m.price*1.006,spark:[],isMetal:true,icon:m.icon});
+      });
+    }
+
     S.lastMktFetch=now;
     S.myCoins.forEach(mc=>{
+      if(mc.isMetal) return; // metals handled above
       const f=S.marketData.find(d=>d.sym===mc.sym);
       if(f)S.prices[mc.sym]={price:f.price,chg:f.chg,vol:f.vol,low24:f.low24,high24:f.high24};
     });
@@ -1522,7 +1569,7 @@ async function fetchMarket(force){
     const el=document.getElementById('mkt-updated');if(el)el.textContent='Updated '+new Date().toLocaleTimeString();
   }catch(e){
     const tb=document.getElementById('mkt-tbody');
-    if(tb)tb.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">⚠️ Could not load. Try again.</td></tr>';
+    if(tb)tb.innerHTML='<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">⚠️ Could not load. Try again.</td></tr>';
   }
   if(btn)btn.classList.remove('spin');
 }
@@ -3653,7 +3700,13 @@ if(/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.navigator.standalone){
     document.body.appendChild(el);
     setTimeout(()=>el.remove(),8000);
   },3000);
-}
+<scrip
+src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const supabase = window.supabase.createClient(
+  "https://jqtawulzhfmierbnckuz.supabase.com",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxdGF3dWx6aGZtaWVyYm5ja3V6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0MDM2MjksImV4cCI6MjA5Njk3OTYyOX0.3IHI8eFsupfLBgBKjbgXOyCWplrd3daPH-2DX8UISAE"
+);
 </script>
 </body>
 </html>

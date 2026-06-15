@@ -1,4 +1,4 @@
-const CACHE = 'cryptodesk-v1';
+const CACHE = 'cryptodesk-v2';
 const ASSETS = [
   '/',
   '/index.html',

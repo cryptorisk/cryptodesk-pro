@@ -3646,7 +3646,14 @@ async function doSignup(){
       data:{name,username:user,avatar:name.charAt(0).toUpperCase()}
     }
   });
-  if(error){showAuthError(error.message);return;}
+  if(error){
+    if(error.message&&error.message.toLowerCase().includes('weak_password')||error.message&&error.message.toLowerCase().includes('weak password')||error.message&&error.message.toLowerCase().includes('password should contain')){
+      showAuthError('❌ Weak password — must include uppercase, lowercase, number and special character (!@#$)');
+    } else {
+      showAuthError(error.message);
+    }
+    return;
+  }
   const u=data.user;
   // Duplicate email check
   if(u&&u.identities&&u.identities.length===0){

@@ -28,25 +28,31 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
-// Fetch — cache first, network fallback
+// Fetch — network first for all external APIs
 self.addEventListener('fetch', e => {
-  // Skip non-GET and chrome-extension requests
   if(e.request.method !== 'GET') return;
   if(e.request.url.startsWith('chrome-extension')) return;
 
-  // For API calls (CoinGecko, Binance, Anthropic) — always network first
-  const isAPI = e.request.url.includes('api.coingecko') ||
-                e.request.url.includes('api.binance') ||
-                e.request.url.includes('api.anthropic');
+  // ✅ Always network-first for these (never cache)
+  const isNetworkOnly =
+    e.request.url.includes('supabase.co') ||      // Auth & DB
+    e.request.url.includes('supabase.io') ||
+    e.request.url.includes('api.coingecko') ||
+    e.request.url.includes('api.binance') ||
+    e.request.url.includes('api.anthropic') ||
+    e.request.url.includes('frankfurter.app') ||
+    e.request.url.includes('goldprice.org') ||
+    e.request.url.includes('allorigins.win') ||
+    e.request.url.includes('cdn.jsdelivr.net');   // Supabase JS lib
 
-  if(isAPI){
+  if(isNetworkOnly){
     e.respondWith(
       fetch(e.request).catch(() => new Response('{}', {headers:{'Content-Type':'application/json'}}))
     );
     return;
   }
 
-  // For app files — cache first
+  // For app files only — cache first
   e.respondWith(
     caches.match(e.request).then(cached => {
       if(cached) return cached;
@@ -61,7 +67,6 @@ self.addEventListener('fetch', e => {
   );
 });
 
-// Background sync message
 self.addEventListener('message', e => {
   if(e.data === 'skipWaiting') self.skipWaiting();
 });

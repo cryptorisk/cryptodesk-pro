@@ -440,7 +440,7 @@ textarea{resize:vertical;min-height:52px;font-size:12px;}
 
       <!-- LOGIN FORM -->
       <div id="auth-form-login">
-        <div class="auth-field"><label>Username or Email</label><input type="text" id="login-user" placeholder="Enter username or email" autocomplete="username"></div>
+        <div class="auth-field"><label>Email</label><input type="email" id="login-user" placeholder="Enter your email" autocomplete="email"></div>
         <div class="auth-field"><label>Password</label><input type="password" id="login-pass" placeholder="Enter password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
         <button class="auth-btn" onclick="doLogin()">Sign In →</button>
       </div>
@@ -952,10 +952,79 @@ let S={
   sparkData:{}
 };
 function load(){
+  // legacy localStorage load (used only before auth)
   try{const d=localStorage.getItem('cdp6');if(d){const p=JSON.parse(d);S={...S,...p};}}catch(e){}
   applySettings();renderAll();fetchMarket(false);renderTFPills();
 }
-function save(){localStorage.setItem('cdp6',JSON.stringify(S));}
+
+// ── SUPABASE DATA LAYER ──
+async function sbLoadUserData(uid){
+  try{
+    // Load settings + capital + rules + myCoins
+    const{data:sets}=await supabase.from('user_settings').select('*').eq('uid',uid).maybeSingle();
+    if(sets){
+      S.capital=sets.capital||10000;
+      if(sets.settings&&Object.keys(sets.settings).length) S.settings={...S.settings,...sets.settings};
+      if(sets.rules&&Object.keys(sets.rules).length) S.rules=sets.rules;
+      if(sets.my_coins&&sets.my_coins.length) S.myCoins=sets.my_coins;
+    }
+    // Load trades
+    const{data:trades}=await supabase.from('trades').select('*').eq('uid',uid).order('id',{ascending:false});
+    if(trades&&trades.length){
+      S.trades=trades.map(t=>({id:t.id,date:t.date,pair:t.pair,dir:t.dir,entry:t.entry,pos:t.pos,lev:t.lev,move:t.move,exit:t.exit,outcome:t.outcome,pnl:t.pnl,notes:t.notes}));
+    }
+    // Load checklist
+    const{data:chk}=await supabase.from('checklists').select('*').eq('uid',uid).maybeSingle();
+    if(chk){
+      if(chk.check_items&&chk.check_items.length) S.checkItems=chk.check_items;
+      if(chk.checks) S.checks=chk.checks;
+    }
+  }catch(e){console.error('sbLoadUserData',e);}
+}
+
+async function sbSaveSettings(){
+  const uid=window._currentUID;if(!uid||uid==='guest')return;
+  try{
+    await supabase.from('user_settings').upsert({
+      uid,capital:S.capital,
+      settings:S.settings,rules:S.rules,my_coins:S.myCoins,
+      updated_at:new Date().toISOString()
+    });
+  }catch(e){console.error('sbSaveSettings',e);}
+}
+
+async function sbSaveChecklist(){
+  const uid=window._currentUID;if(!uid||uid==='guest')return;
+  try{
+    await supabase.from('checklists').upsert({
+      uid,check_items:S.checkItems,checks:S.checks,
+      updated_at:new Date().toISOString()
+    });
+  }catch(e){console.error('sbSaveChecklist',e);}
+}
+
+async function sbAddTrade(trade){
+  const uid=window._currentUID;if(!uid||uid==='guest')return;
+  try{
+    await supabase.from('trades').upsert({...trade,uid});
+  }catch(e){console.error('sbAddTrade',e);}
+}
+
+async function sbDeleteTrade(id){
+  const uid=window._currentUID;if(!uid||uid==='guest')return;
+  try{await supabase.from('trades').delete().eq('uid',uid).eq('id',id);}catch(e){}
+}
+
+async function sbClearTrades(){
+  const uid=window._currentUID;if(!uid||uid==='guest')return;
+  try{await supabase.from('trades').delete().eq('uid',uid);}catch(e){}
+}
+
+function save(){
+  const key=window._currentUserKey||'cdp6';
+  try{localStorage.setItem(key,JSON.stringify(S));}catch(e){}
+  sbSaveSettings();
+}
 
 // ══════════════════════════════════════
 // TABS
@@ -2683,8 +2752,9 @@ function logTrade(){
   let pnl=0;
   if(outcome==='win')pnl=risk;else if(outcome==='loss')pnl=-risk;
   else if(outcome==='open'&&exitP&&entry){const pct=(exitP-entry)/entry;pnl=S.dir==='long'?pos*pct:pos*-pct;}
-  S.trades.unshift({id:Date.now(),date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}),pair:S.pair||'BTC/USDT',dir:S.dir,entry,pos,lev,move,exit:exitP,outcome,pnl:Math.round(pnl*100)/100,notes});
-  save();renderJournal();updateHeader();updateProgress();
+  const newTrade={id:Date.now(),date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}),pair:S.pair||'BTC/USDT',dir:S.dir,entry,pos,lev,move,exit:exitP,outcome,pnl:Math.round(pnl*100)/100,notes};
+  S.trades.unshift(newTrade);
+  save();sbAddTrade(newTrade);renderJournal();updateHeader();updateProgress();
   ['l-entry','l-exit','l-notes'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('l-out').value='open';toast('Trade saved ✅');
 }
@@ -2754,7 +2824,7 @@ function renderChecklist(){
     </div>`).join('');
   updateMeter();
 }
-function toggleChk(id){S.checks[id]=!S.checks[id];save();const el=document.getElementById('chk-'+id);if(el)el.classList.toggle('done',S.checks[id]);updateMeter();}
+function toggleChk(id){S.checks[id]=!S.checks[id];save();sbSaveChecklist();const el=document.getElementById('chk-'+id);if(el)el.classList.toggle('done',S.checks[id]);updateMeter();}
 function updateMeter(){
   const total=S.checkItems.length;const passed=S.checkItems.filter(i=>S.checks[i.id]).length;
   const pct=total?passed/total*100:0;
@@ -2772,7 +2842,7 @@ function editChk(id){
   document.getElementById('modal-title').textContent='Edit Check';document.getElementById('modal-save-btn').textContent='Update';document.getElementById('modal-save-btn').style.display='';
   showForm('chk');document.getElementById('modal-overlay').classList.add('open');
 }
-function deleteChk(id){if(!confirm('Delete?'))return;S.checkItems=S.checkItems.filter(x=>x.id!==id);delete S.checks[id];save();renderChecklist();toast('Deleted');}
+function deleteChk(id){if(!confirm('Delete?'))return;S.checkItems=S.checkItems.filter(x=>x.id!==id);delete S.checks[id];save();sbSaveChecklist();renderChecklist();toast('Deleted');}
 
 // ══════════════════════════════════════
 // RULES
@@ -2864,7 +2934,7 @@ function recalcTargets(){
 function exportData(){const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='cryptodesk-backup.json';a.click();toast('Exported 📤');}
 function importData(){const input=document.createElement('input');input.type='file';input.accept='.json';input.onchange=e=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=ev=>{try{const data=JSON.parse(ev.target.result);S={...S,...data};save();renderAll();toast('Imported ✅');}catch(e){toast('Invalid file ❌');}};reader.readAsText(file);};input.click();}
 function resetAll(){if(!confirm('Reset EVERYTHING?'))return;S={capital:10000,trades:[],checks:{},checkItems:[...DEFAULT_CHECKS],rules:JSON.parse(JSON.stringify(DEFAULT_RULES)),settings:{...DEFAULT_SETTINGS},dir:null,pair:null,prices:{},myCoins:[...BUILTIN],marketData:[],lastMktFetch:0,sparkData:{}};save();renderAll();applySettings();toast('Reset complete');}
-function clearTrades(){if(!confirm('Clear history?'))return;S.trades=[];save();renderJournal();updateHeader();toast('Cleared');}
+function clearTrades(){if(!confirm('Clear history?'))return;S.trades=[];save();sbClearTrades();renderJournal();updateHeader();toast('Cleared');}
 
 // ══════════════════════════════════════
 // HELPERS
@@ -3444,10 +3514,29 @@ async function doSignup(){
   showAuthError('⏳ Creating account...');
   const{data,error}=await supabase.auth.signUp({
     email,password:pass,
-    options:{data:{name,username:user,avatar:name.charAt(0).toUpperCase()}}
+    options:{
+      emailRedirectTo:'https://cryptorisk.github.io/cryptodesk-pro/',
+      data:{name,username:user,avatar:name.charAt(0).toUpperCase()}
+    }
   });
   if(error){showAuthError(error.message);return;}
   const u=data.user;
+  // Duplicate email: Supabase returns a fake user with no identities
+  if(u&&u.identities&&u.identities.length===0){
+    showAuthError('⚠️ This email is already registered. Please sign in.');
+    return;
+  }
+  // Email confirmation required (no session returned)
+  if(!data.session){
+    showAuthError('✅ Account created! Check your email to confirm, then sign in.');
+    document.querySelectorAll('.auth-tab').forEach(b=>b.classList.remove('on'));
+    document.querySelector('.auth-tab').classList.add('on');
+    document.getElementById('auth-form-login').style.display='block';
+    document.getElementById('auth-form-signup').style.display='none';
+    return;
+  }
+  // Save profile to Supabase
+  await supabase.from('profiles').upsert({uid:u.id,name,username:user,avatar:name.charAt(0).toUpperCase()});
   const profile={uid:u.id,name,user,email,avatar:name.charAt(0).toUpperCase()};
   enterApp(profile);
 }
@@ -3456,12 +3545,31 @@ async function doLogin(){
   const input=document.getElementById('login-user').value.trim().toLowerCase();
   const pass=document.getElementById('login-pass').value;
   if(!input||!pass){showAuthError('Please fill in all fields');return;}
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(input)){showAuthError('Please enter a valid email address');return;}
   showAuthError('⏳ Signing in...');
   const{data,error}=await supabase.auth.signInWithPassword({email:input,password:pass});
-  if(error){showAuthError(error.message);return;}
+  if(error){
+    if(error.message==='Email not confirmed'){
+      showAuthError('⚠️ Please confirm your email first. Check your inbox.');
+    } else if(error.message==='Invalid login credentials'){
+      showAuthError('❌ Incorrect email or password.');
+    } else {
+      showAuthError(error.message);
+    }
+    return;
+  }
   const u=data.user;
   const meta=u.user_metadata||{};
-  const profile={uid:u.id,name:meta.name||input,user:meta.username||input,email:u.email,avatar:(meta.name||input).charAt(0).toUpperCase()};
+  // Try to get richer profile from profiles table
+  let name=meta.name||input, username=meta.username||input, avatar=(meta.name||input).charAt(0).toUpperCase();
+  try{
+    const{data:prof}=await supabase.from('profiles').select('*').eq('uid',u.id).maybeSingle();
+    if(prof){name=prof.name||name;username=prof.username||username;avatar=prof.avatar||avatar;}
+    else{ // First login after signup — ensure profile exists
+      await supabase.from('profiles').upsert({uid:u.id,name,username,avatar});
+    }
+  }catch(e){}
+  const profile={uid:u.id,name,user:username,email:u.email,avatar};
   enterApp(profile);
 }
 
@@ -3471,11 +3579,14 @@ function continueAsGuest(){
   enterApp(guest);
 }
 
-function enterApp(user){
+async function enterApp(user){
   const dataKey=userDataKey(user.uid);
-  try{const d=localStorage.getItem(dataKey);if(d){const p=JSON.parse(d);S={...S,...p};}}catch(e){}
   window._currentUserKey=dataKey;
   window._currentDemoKey=demoDataKey(user.uid);
+  window._currentUID=user.uid;
+  // Load from Supabase first (non-guest)
+  if(user.uid!=='guest') await sbLoadUserData(user.uid);
+  else { try{const d=localStorage.getItem(dataKey);if(d){const p=JSON.parse(d);S={...S,...p};}}catch(e){} }
   updateAvatarUI(user);
   setSession(user);
   document.getElementById('auth-screen').style.display='none';
@@ -3541,6 +3652,7 @@ async function doLogout(){
 function saveCurrentUserData(){
   const key=window._currentUserKey;if(!key)return;
   try{localStorage.setItem(key,JSON.stringify(S));}catch(e){}
+  sbSaveSettings();sbSaveChecklist();
 }
 
 function save(){
@@ -3553,11 +3665,16 @@ async function authInit(){
   const{data:{session}}=await supabase.auth.getSession();
   if(session&&session.user){
     const u=session.user;const meta=u.user_metadata||{};
-    const profile={uid:u.id,name:meta.name||u.email,user:meta.username||u.email,email:u.email,avatar:(meta.name||u.email).charAt(0).toUpperCase()};
+    let name=meta.name||u.email, username=meta.username||u.email, avatar=(meta.name||u.email).charAt(0).toUpperCase();
+    try{
+      const{data:prof}=await supabase.from('profiles').select('*').eq('uid',u.id).maybeSingle();
+      if(prof){name=prof.name||name;username=prof.username||username;avatar=prof.avatar||avatar;}
+    }catch(e){}
+    const profile={uid:u.id,name,user:username,email:u.email,avatar};
     enterApp(profile);
   } else {
     const local=getSession();
-    if(local) enterApp(local);
+    if(local&&local.uid==='guest') enterApp(local);
     else document.getElementById('auth-screen').style.display='flex';
   }
 }

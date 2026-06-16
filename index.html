@@ -3521,13 +3521,16 @@ async function doSignup(){
   });
   if(error){showAuthError(error.message);return;}
   const u=data.user;
-  // Duplicate email: Supabase returns a fake user with no identities
+  // Duplicate email check
   if(u&&u.identities&&u.identities.length===0){
     showAuthError('⚠️ This email is already registered. Please sign in.');
     return;
   }
-  // Email confirmation required (no session returned)
-  if(!data.session){
+  // Try auto sign-in (works if email confirmation is disabled)
+  showAuthError('⏳ Signing in...');
+  const{data:loginData,error:loginError}=await supabase.auth.signInWithPassword({email,password:pass});
+  if(loginError){
+    // Email confirmation required
     showAuthError('✅ Account created! Check your email to confirm, then sign in.');
     document.querySelectorAll('.auth-tab').forEach(b=>b.classList.remove('on'));
     document.querySelector('.auth-tab').classList.add('on');
@@ -3535,10 +3538,10 @@ async function doSignup(){
     document.getElementById('auth-form-signup').style.display='none';
     return;
   }
-  // Save profile to Supabase
-  await supabase.from('profiles').upsert({uid:u.id,name,username:user,avatar:name.charAt(0).toUpperCase()});
-  const profile={uid:u.id,name,user,email,avatar:name.charAt(0).toUpperCase()};
-  enterApp(profile);
+  const lu=loginData.user;
+  await supabase.from('profiles').upsert({uid:lu.id,name,username:user,avatar:name.charAt(0).toUpperCase()});
+  const profile={uid:lu.id,name,user,email,avatar:name.charAt(0).toUpperCase()};
+  await enterApp(profile);
 }
 
 async function doLogin(){
@@ -3570,13 +3573,13 @@ async function doLogin(){
     }
   }catch(e){}
   const profile={uid:u.id,name,user:username,email:u.email,avatar};
-  enterApp(profile);
+  await enterApp(profile);
 }
 
-function continueAsGuest(){
+async function continueAsGuest(){
   const guest={uid:'guest',user:'guest',name:'Guest Trader',email:'guest mode',avatar:'G'};
   setSession(guest);
-  enterApp(guest);
+  await enterApp(guest);
 }
 
 async function enterApp(user){
@@ -3671,10 +3674,10 @@ async function authInit(){
       if(prof){name=prof.name||name;username=prof.username||username;avatar=prof.avatar||avatar;}
     }catch(e){}
     const profile={uid:u.id,name,user:username,email:u.email,avatar};
-    enterApp(profile);
+    await enterApp(profile);
   } else {
     const local=getSession();
-    if(local&&local.uid==='guest') enterApp(local);
+    if(local&&local.uid==='guest') await enterApp(local);
     else document.getElementById('auth-screen').style.display='flex';
   }
 }

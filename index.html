@@ -3430,215 +3430,139 @@ function showAuthError(msg){
 }
 
 // ── Sign Up ──
-function doSignup(){
+// ── SUPABASE AUTH ──
+async function doSignup(){
   const name=document.getElementById('signup-name').value.trim();
   const user=document.getElementById('signup-user').value.trim().toLowerCase();
   const email=document.getElementById('signup-email').value.trim().toLowerCase();
   const pass=document.getElementById('signup-pass').value;
   const pass2=document.getElementById('signup-pass2').value;
-
   if(!name||!user||!email||!pass){showAuthError('All fields are required');return;}
   if(pass.length<6){showAuthError('Password must be at least 6 characters');return;}
   if(pass!==pass2){showAuthError('Passwords do not match');return;}
   if(!/^[a-z0-9_]+$/.test(user)){showAuthError('Username: only letters, numbers, underscore');return;}
-
-  const users=getUsers();
-  if(users[user]){showAuthError('Username already taken');return;}
-  // Check email uniqueness
-  if(Object.values(users).some(u=>u.email===email)){showAuthError('Email already registered');return;}
-
-  const uid='u_'+Date.now();
-  users[user]={uid,name,email,user,pass:btoa(pass),created:new Date().toISOString(),avatar:name.charAt(0).toUpperCase()};
-  saveUsers(users);
-  setSession({uid,user,name,email,avatar:users[user].avatar});
-  enterApp(users[user]);
+  showAuthError('⏳ Creating account...');
+  const{data,error}=await supabase.auth.signUp({
+    email,password:pass,
+    options:{data:{name,username:user,avatar:name.charAt(0).toUpperCase()}}
+  });
+  if(error){showAuthError(error.message);return;}
+  const u=data.user;
+  const profile={uid:u.id,name,user,email,avatar:name.charAt(0).toUpperCase()};
+  enterApp(profile);
 }
 
-// ── Sign In ──
-function doLogin(){
+async function doLogin(){
   const input=document.getElementById('login-user').value.trim().toLowerCase();
   const pass=document.getElementById('login-pass').value;
   if(!input||!pass){showAuthError('Please fill in all fields');return;}
-
-  const users=getUsers();
-  // Find by username or email
-  const found=Object.values(users).find(u=>u.user===input||u.email===input);
-  if(!found){showAuthError('Account not found');return;}
-  if(atob(found.pass)!==pass){showAuthError('Incorrect password');return;}
-
-  setSession({uid:found.uid,user:found.user,name:found.name,email:found.email,avatar:found.avatar});
-  enterApp(found);
+  showAuthError('⏳ Signing in...');
+  const{data,error}=await supabase.auth.signInWithPassword({email:input,password:pass});
+  if(error){showAuthError(error.message);return;}
+  const u=data.user;
+  const meta=u.user_metadata||{};
+  const profile={uid:u.id,name:meta.name||input,user:meta.username||input,email:u.email,avatar:(meta.name||input).charAt(0).toUpperCase()};
+  enterApp(profile);
 }
 
-// ── Guest ──
 function continueAsGuest(){
   const guest={uid:'guest',user:'guest',name:'Guest Trader',email:'guest mode',avatar:'G'};
   setSession(guest);
   enterApp(guest);
 }
 
-// ── Enter app ──
 function enterApp(user){
-  // Load this user's saved data
   const dataKey=userDataKey(user.uid);
-  try{
-    const d=localStorage.getItem(dataKey);
-    if(d){const p=JSON.parse(d);S={...S,...p};}
-  }catch(e){}
-
-  // Override save/load to be per-user
+  try{const d=localStorage.getItem(dataKey);if(d){const p=JSON.parse(d);S={...S,...p};}}catch(e){}
   window._currentUserKey=dataKey;
   window._currentDemoKey=demoDataKey(user.uid);
-
-  // Update avatar
   updateAvatarUI(user);
-
-  // Hide auth screen
+  setSession(user);
   document.getElementById('auth-screen').style.display='none';
-
-  // Init app normally
   applySettings();
   renderAll();
   initDemo();
-
-  // Show guide/profile only on first login for this user
   const profileDone=localStorage.getItem('cdp_profile_done_'+user.uid);
   const skipGuide=localStorage.getItem('cdp_guide_skip_'+user.uid);
   if(!profileDone){
-    profileMode=true;
-    showProfileSetup();
+    profileMode=true;showProfileSetup();
     document.getElementById('guide-overlay').style.display='flex';
   } else if(!skipGuide){
-    profileMode=false;
-    guideCurrentStep=0;
+    profileMode=false;guideCurrentStep=0;
     document.getElementById('guide-dots').style.display='flex';
     document.getElementById('guide-footer').style.display='flex';
     renderGuideStep();
     document.getElementById('guide-overlay').style.display='flex';
   }
-
-  // Save demo on page close
-  window.addEventListener('beforeunload', ()=>{
-    saveCurrentUserData();
-    saveDemo();
-  });
-
-  // Start price fetching
+  window.addEventListener('beforeunload',()=>{saveCurrentUserData();saveDemo();});
   fetchMarket(false);
 }
 
-// ── Avatar UI ──
 function updateAvatarUI(user){
   const av=document.getElementById('profile-avatar-btn');
   if(av)av.textContent=user.avatar||user.name.charAt(0).toUpperCase();
-  document.getElementById('pd-name').textContent=user.name;
-  document.getElementById('pd-email').textContent=user.email;
+  const pn=document.getElementById('pd-name');const pe=document.getElementById('pd-email');
+  if(pn)pn.textContent=user.name;if(pe)pe.textContent=user.email;
 }
 
-// ── Profile dropdown ──
 function toggleProfileDropdown(){
   const dd=document.getElementById('profile-dropdown');
   const av=document.getElementById('profile-avatar-btn');
   if(dd.style.display==='none'){
-    // Position relative to avatar
     const rect=av.getBoundingClientRect();
-    dd.style.position='fixed';
-    dd.style.top=(rect.bottom+8)+'px';
-    dd.style.right=(window.innerWidth-rect.right)+'px';
-    dd.style.display='block';
-    // Close on outside click
+    dd.style.cssText='display:block;position:fixed;top:'+(rect.bottom+8)+'px;right:'+(window.innerWidth-rect.right)+'px;';
     setTimeout(()=>document.addEventListener('click',closeOnOutside),10);
-  } else {
-    closeProfileDropdown();
-  }
+  } else { closeProfileDropdown(); }
 }
 function closeOnOutside(e){
-  if(!document.getElementById('profile-dropdown').contains(e.target)&&e.target.id!=='profile-avatar-btn'){
-    closeProfileDropdown();
-  }
+  if(!document.getElementById('profile-dropdown').contains(e.target)&&e.target.id!=='profile-avatar-btn') closeProfileDropdown();
 }
 function closeProfileDropdown(){
   document.getElementById('profile-dropdown').style.display='none';
   document.removeEventListener('click',closeOnOutside);
 }
 
-// ── Switch profiles ──
-function showAllProfiles(){
-  closeProfileDropdown();
-  const users=getUsers();
-  const list=Object.values(users);
-  if(list.length<=1){toast('Only one account. Sign up for more.');return;}
-  const html=list.map(u=>`
-    <div onclick="switchToUser('${u.user}')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--s2);border-radius:9px;margin-bottom:7px;cursor:pointer;border:1px solid var(--border);">
-      <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--lime),#8fff00);display:flex;align-items:center;justify-content:center;font-weight:700;color:#000;font-size:14px;">${u.avatar||u.name.charAt(0)}</div>
-      <div><div style="font-weight:700;font-size:13px;">${u.name}</div><div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">@${u.user}</div></div>
-    </div>`).join('');
-  // Show in a simple overlay
-  const overlay=document.createElement('div');
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(6px);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px;';
-  overlay.innerHTML=`<div style="background:var(--s1);border:1px solid var(--border2);border-radius:16px;padding:20px;width:100%;max-width:360px;">
-    <div style="font-family:'Clash Display',sans-serif;font-size:18px;font-weight:700;margin-bottom:14px;">👥 Switch Profile</div>
-    ${html}
-    <button onclick="this.closest('div[style]').remove()" style="width:100%;padding:10px;background:var(--s2);border:1px solid var(--border2);border-radius:9px;color:var(--muted);font-family:'Cabinet Grotesk',sans-serif;font-size:13px;font-weight:700;cursor:pointer;margin-top:4px;">Cancel</button>
-  </div>`;
-  document.body.appendChild(overlay);
-}
+function showAllProfiles(){ closeProfileDropdown(); toast('Use Sign Out to switch accounts'); }
+function switchToUser(u){ toast('Use Sign Out to switch accounts'); }
 
-function switchToUser(username){
-  document.querySelectorAll('div[style*="inset:0"]').forEach(el=>el.remove());
-  // Save current user data first
-  saveCurrentUserData();
-  // Load new user
-  const users=getUsers();
-  const user=users[username];if(!user)return;
-  setSession({uid:user.uid,user:user.user,name:user.name,email:user.email,avatar:user.avatar});
-  // Reset state
-  S={capital:10000,trades:[],checks:{},checkItems:[...DEFAULT_CHECKS],rules:JSON.parse(JSON.stringify(DEFAULT_RULES)),settings:{...DEFAULT_SETTINGS},dir:null,pair:null,prices:{},myCoins:[...BUILTIN],marketData:[],lastMktFetch:0};
-  enterApp(user);
-  toast('Switched to '+user.name);
-}
-
-// ── Sign Out ──
-function doLogout(){
+async function doLogout(){
   closeProfileDropdown();
-  saveCurrentUserData();
+  saveCurrentUserData();saveDemo();
+  const session=getSession();
+  if(session&&session.uid!=='guest') await supabase.auth.signOut();
   clearSession();
-  // Reset state
   S={capital:10000,trades:[],checks:{},checkItems:[...DEFAULT_CHECKS],rules:JSON.parse(JSON.stringify(DEFAULT_RULES)),settings:{...DEFAULT_SETTINGS},dir:null,pair:null,prices:{},myCoins:[...BUILTIN],marketData:[],lastMktFetch:0};
   document.getElementById('auth-screen').style.display='flex';
-  // Clear login form
   ['login-user','login-pass','signup-name','signup-user','signup-email','signup-pass','signup-pass2'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('auth-err').style.display='none';
   toast('Signed out');
 }
 
-// ── Per-user save ──
 function saveCurrentUserData(){
   const key=window._currentUserKey;if(!key)return;
   try{localStorage.setItem(key,JSON.stringify(S));}catch(e){}
 }
 
-// Override global save to use per-user key
-const _origSave=window.save||function(){};
 function save(){
   const key=window._currentUserKey||'cdp6';
   try{localStorage.setItem(key,JSON.stringify(S));}catch(e){}
 }
 
-// ── Auth check on load ──
-function authInit(){
-  const session=getSession();
-  if(session){
-    enterApp(session);
+async function authInit(){
+  // Check active Supabase session first
+  const{data:{session}}=await supabase.auth.getSession();
+  if(session&&session.user){
+    const u=session.user;const meta=u.user_metadata||{};
+    const profile={uid:u.id,name:meta.name||u.email,user:meta.username||u.email,email:u.email,avatar:(meta.name||u.email).charAt(0).toUpperCase()};
+    enterApp(profile);
   } else {
-    document.getElementById('auth-screen').style.display='flex';
+    const local=getSession();
+    if(local) enterApp(local);
+    else document.getElementById('auth-screen').style.display='flex';
   }
 }
 
-// Override profile done / guide skip to be per-user
-const _origGuideInit=window.guideInit;
-function guideInit(){ /* handled in enterApp */ }
-
+function guideInit(){}
 load();
 authInit();</script>
 

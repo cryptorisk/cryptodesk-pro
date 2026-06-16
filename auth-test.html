@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Supabase Auth Test</title>
+<style>
+body{font-family:monospace;background:#0a0a0a;color:#e0e0e0;padding:20px;max-width:600px;margin:0 auto;}
+button{background:#c6f135;color:#000;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-weight:700;margin:5px;font-size:14px;}
+input{background:#1a1a2e;color:#e0e0e0;border:1px solid #333;padding:8px 12px;border-radius:6px;width:100%;margin:4px 0;font-size:14px;box-sizing:border-box;}
+.box{background:#111;border:1px solid #333;border-radius:8px;padding:14px;margin:10px 0;}
+.ok{color:#c6f135;} .err{color:#ff3d5a;} .info{color:#00d4ff;}
+pre{white-space:pre-wrap;word-break:break-all;font-size:12px;margin:8px 0;}
+</style>
+</head>
+<body>
+<h2>🔧 Supabase Auth Debugger</h2>
+
+<div class="box">
+  <b>Email:</b><input id="email" type="email" value="test123@gmail.com">
+  <b>Password:</b><input id="pass" type="password" value="test123456">
+  <br><br>
+  <button onclick="testSignup()">Test signUp()</button>
+  <button onclick="testLogin()">Test signInWithPassword()</button>
+  <button onclick="testSession()">Check Session</button>
+  <button onclick="testSignout()">Sign Out</button>
+</div>
+
+<div class="box">
+  <b>Result:</b>
+  <pre id="out">Click a button to test...</pre>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const supabase = window.supabase.createClient(
+  "https://jqtawulzhfmierbnckuz.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxdGF3dWx6aGZtaWVyYm5ja3V6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0MDM2MjksImV4cCI6MjA5Njk3OTYyOX0.3IHI8eFsupfLBgBKjbgXOyCWplrd3daPH-2DX8UISAE"
+);
+
+function log(msg, type='info'){
+  const el = document.getElementById('out');
+  const color = type==='ok'?'#c6f135':type==='err'?'#ff3d5a':'#00d4ff';
+  el.innerHTML += `<span style="color:${color}">${msg}</span>\n`;
+}
+function clearLog(){ document.getElementById('out').innerHTML=''; }
+
+async function testSignup(){
+  clearLog();
+  const email = document.getElementById('email').value;
+  const pass = document.getElementById('pass').value;
+  log(`▶ signUp(${email})...`);
+  try{
+    const {data, error} = await supabase.auth.signUp({email, password:pass});
+    if(error){
+      log(`❌ ERROR: ${error.message}`, 'err');
+      log(`   Status: ${error.status}`, 'err');
+      log(`   Code: ${error.code||'none'}`, 'err');
+    } else {
+      log(`✅ signUp OK`, 'ok');
+      log(`   user.id: ${data.user?.id}`, 'ok');
+      log(`   session: ${data.session ? 'YES ✅' : 'NULL (email confirm required)'}`, data.session?'ok':'err');
+      log(`   identities: ${JSON.stringify(data.user?.identities?.length)}`, 'ok');
+      log(`   email_confirmed: ${data.user?.email_confirmed_at||'not confirmed'}`, 'ok');
+    }
+  }catch(e){
+    log(`💥 EXCEPTION: ${e.message}`, 'err');
+  }
+}
+
+async function testLogin(){
+  clearLog();
+  const email = document.getElementById('email').value;
+  const pass = document.getElementById('pass').value;
+  log(`▶ signInWithPassword(${email})...`);
+  try{
+    const {data, error} = await supabase.auth.signInWithPassword({email, password:pass});
+    if(error){
+      log(`❌ ERROR: ${error.message}`, 'err');
+      log(`   Status: ${error.status}`, 'err');
+      log(`   Code: ${error.code||'none'}`, 'err');
+    } else {
+      log(`✅ Login OK!`, 'ok');
+      log(`   user.id: ${data.user?.id}`, 'ok');
+      log(`   email: ${data.user?.email}`, 'ok');
+      log(`   session expires: ${data.session?.expires_at}`, 'ok');
+    }
+  }catch(e){
+    log(`💥 EXCEPTION: ${e.message}`, 'err');
+  }
+}
+
+async function testSession(){
+  clearLog();
+  log('▶ getSession()...');
+  const {data:{session}} = await supabase.auth.getSession();
+  if(session){
+    log(`✅ Active session found`, 'ok');
+    log(`   user: ${session.user.email}`, 'ok');
+    log(`   expires: ${new Date(session.expires_at*1000).toLocaleString()}`, 'ok');
+  } else {
+    log('❌ No active session', 'err');
+  }
+}
+
+async function testSignout(){
+  clearLog();
+  await supabase.auth.signOut();
+  log('✅ Signed out', 'ok');
+}
+</script>
+</body>
+</html>

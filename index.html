@@ -15,6 +15,24 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Clash+Display:wght@400;500;600;700&family=Cabinet+Grotesk:wght@400;500;700;800&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#070810;--s1:#0d0f1a;--s2:#12141f;--s3:#1a1d2e;--border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);--lime:#c6f135;--cyan:#00d4ff;--red:#ff3d5a;--yellow:#ffbb00;--purple:#a855f7;--text:#e8eaf2;--muted:#5a5e7a;--muted2:#3a3d52;}
+
+/* ── THEMES ── */
+[data-theme="night"]{--bg:#070810;--s1:#0d0f1a;--s2:#12141f;--s3:#1a1d2e;--border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);--text:#e8eaf2;--muted:#5a5e7a;--muted2:#3a3d52;}
+[data-theme="evening"]{--bg:#0e0c18;--s1:#161428;--s2:#1c1a30;--s3:#23213c;--border:rgba(180,160,255,0.1);--border2:rgba(180,160,255,0.18);--text:#e2dff5;--muted:#7a718f;--muted2:#47425e;}
+[data-theme="day"]{--bg:#f0f2f8;--s1:#ffffff;--s2:#f5f6fb;--s3:#e8eaf5;--border:rgba(0,0,0,0.08);--border2:rgba(0,0,0,0.14);--text:#1a1d2e;--muted:#7a7d96;--muted2:#c0c3d8;--lime:#5aaa00;--red:#d42040;--cyan:#007aaa;--purple:#7c3aed;}
+[data-theme="day"] .nav-btn{color:#4a4d62;}
+[data-theme="day"] .nav-btn.on{background:var(--lime);color:#fff;}
+[data-theme="day"] .card{box-shadow:0 2px 12px rgba(0,0,0,0.06);}
+[data-theme="day"] input,[data-theme="day"] select,[data-theme="day"] textarea{color:var(--text);}
+[data-theme="day"] .auth-card{box-shadow:0 8px 30px rgba(0,0,0,0.1);}
+[data-theme="day"] .auth-field input{color:var(--text);}
+
+/* Theme switcher widget */
+.theme-switcher{display:flex;gap:5px;align-items:center;}
+.theme-btn{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .2s;background:var(--s2);}
+.theme-btn:hover{transform:scale(1.15);}
+.theme-btn.active{border-color:var(--lime);box-shadow:0 0 8px rgba(198,241,53,0.4);}
+[data-theme="day"] .theme-btn.active{border-color:var(--lime);box-shadow:0 0 8px rgba(90,170,0,0.4);}
 *{margin:0;padding:0;box-sizing:border-box;}
 body{background:var(--bg);color:var(--text);font-family:'Cabinet Grotesk',sans-serif;min-height:100vh;overflow-x:hidden;}
 body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 60% 40% at 80% 10%,rgba(198,241,53,0.04) 0%,transparent 60%),radial-gradient(ellipse 40% 30% at 10% 80%,rgba(0,212,255,0.04) 0%,transparent 60%),repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(255,255,255,0.015) 39px,rgba(255,255,255,0.015) 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(255,255,255,0.015) 39px,rgba(255,255,255,0.015) 40px);pointer-events:none;z-index:0;}
@@ -495,6 +513,12 @@ textarea{resize:vertical;min-height:52px;font-size:12px;}
       <span>🎛️</span><span id="topbar-strategy-label" style="font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Moderate</span>
     </button>
     <button onclick="showGuide()" title="User Guide" style="padding:7px 11px;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.2);border-radius:9px;color:var(--cyan);font-size:16px;cursor:pointer;transition:all .2s;flex-shrink:0;" onmouseover="this.style.background='rgba(0,212,255,0.18)'" onmouseout="this.style.background='rgba(0,212,255,0.08)'">🧭</button>
+    <!-- THEME SWITCHER -->
+    <div class="theme-switcher" title="Display theme">
+      <button class="theme-btn active" id="theme-night" onclick="setTheme('night')" title="Night">🌑</button>
+      <button class="theme-btn" id="theme-evening" onclick="setTheme('evening')" title="Evening">🌆</button>
+      <button class="theme-btn" id="theme-day" onclick="setTheme('day')" title="Day">☀️</button>
+    </div>
     <div class="profile-avatar" id="profile-avatar-btn" onclick="toggleProfileDropdown()" title="Profile">?</div>
   </div>
 </div>
@@ -798,6 +822,26 @@ textarea{resize:vertical;min-height:52px;font-size:12px;}
       <div class="result-row"><span class="rk">Total Trades/Month</span><span class="rv" id="st-r3">90</span></div>
       <div class="result-row"><span class="rk">Margin per Trade</span><span class="rv" id="st-r5">$100</span></div>
       <div class="result-row"><span class="rk">Max Daily Loss</span><span class="rv" id="st-r6" style="color:var(--red)">-$150</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head">Display Theme</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+      <button onclick="setTheme('night')" id="st-theme-night" style="padding:14px 8px;border-radius:10px;border:2px solid var(--border);background:var(--s2);cursor:pointer;transition:all .2s;" class="theme-opt-btn">
+        <div style="font-size:24px;margin-bottom:6px;">🌑</div>
+        <div style="font-family:'Cabinet Grotesk',sans-serif;font-size:12px;font-weight:700;color:var(--text);">Night</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px;">Dark & deep</div>
+      </button>
+      <button onclick="setTheme('evening')" id="st-theme-evening" style="padding:14px 8px;border-radius:10px;border:2px solid var(--border);background:var(--s2);cursor:pointer;transition:all .2s;" class="theme-opt-btn">
+        <div style="font-size:24px;margin-bottom:6px;">🌆</div>
+        <div style="font-family:'Cabinet Grotesk',sans-serif;font-size:12px;font-weight:700;color:var(--text);">Evening</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px;">Soft purple</div>
+      </button>
+      <button onclick="setTheme('day')" id="st-theme-day" style="padding:14px 8px;border-radius:10px;border:2px solid var(--border);background:var(--s2);cursor:pointer;transition:all .2s;" class="theme-opt-btn">
+        <div style="font-size:24px;margin-bottom:6px;">☀️</div>
+        <div style="font-family:'Cabinet Grotesk',sans-serif;font-size:12px;font-weight:700;color:var(--text);">Day</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px;">Light & clear</div>
+      </button>
     </div>
   </div>
   <div class="card">
@@ -1217,9 +1261,9 @@ function openDemoPosition(sym, dir){
   const posSize = risk/move;
   const margin = posSize/coin.lev;
 
-  if(margin > DEMO.capital*0.5){toast('Insufficient demo capital');return;}
-  // Check duplicate
-  if(DEMO.positions.find(p=>p.sym===sym)){toast(sym+' already open in demo');return;}
+  // Allow multiple positions per coin — total margin must stay within capital
+  const usedMargin = DEMO.positions.reduce((a,p)=>a+(p.margin||0),0);
+  if(usedMargin+margin > DEMO.capital*0.9){toast('Insufficient demo capital — close some positions');return;}
 
   const pos = {
     id: Date.now(),
@@ -1252,6 +1296,28 @@ function closeDemoPosition(id){
   DEMO.positions=DEMO.positions.filter(p=>p.id!==id);
   saveDemo();
   toast(`🎮 Demo ${pos.sym} closed → ${pos.pnl>=0?'+':''}$${pos.pnl.toFixed(0)}`);
+  renderDemoUI();
+}
+
+function closeAllDemo(){
+  if(DEMO.positions.length===0)return;
+  if(!confirm(`Close all ${DEMO.positions.length} open demo positions?`))return;
+  const ids=DEMO.positions.map(p=>p.id);
+  let totalPnl=0;
+  ids.forEach(id=>{
+    const pos=DEMO.positions.find(p=>p.id===id);if(!pos)return;
+    const price=DEMO.prices[pos.sym]||pos.entry;
+    const isLong=pos.dir==='long';
+    const pnlPct=isLong?(price-pos.entry)/pos.entry:(pos.entry-price)/pos.entry;
+    const pnl=pos.posSize*pnlPct;
+    pos.exit=price;pos.pnl=Math.round(pnl*100)/100;
+    pos.result=pnl>=0?'win':'loss';pos.closeReason='Closed All';
+    DEMO.capital+=pos.pnl;totalPnl+=pos.pnl;
+    DEMO.history.unshift({...pos,closedAt:new Date().toLocaleTimeString()});
+  });
+  DEMO.positions=[];
+  saveDemo();
+  toast(`🎮 All closed → ${totalPnl>=0?'+':''}$${totalPnl.toFixed(0)}`);
   renderDemoUI();
 }
 
@@ -1307,12 +1373,13 @@ function renderDemoUI(){
     const p=DEMO.prices[sym];
     const ticks=DEMO.ticks[sym]||[];
     const isUp=ticks.length>1&&ticks[ticks.length-1]>=ticks[0];
-    const open=DEMO.positions.find(pos=>pos.sym===sym);
-    const pnlPct=open?(isUp?1:-1)*((DEMO.prices[sym]-open.entry)/open.entry*100).toFixed(2):null;
-    return`<div style="background:var(--s2);border:1px solid ${open?(open.dir==='long'?'rgba(198,241,53,0.3)':'rgba(255,61,90,0.3)'):'var(--border)'};border-radius:9px;padding:9px 10px;cursor:pointer;" onclick="selectDemoCoin('${sym}')">
+    const symPositions=DEMO.positions.filter(pos=>pos.sym===sym);
+    const openCount=symPositions.length;
+    const isSel=DEMO.selectedCoin===sym;
+    return`<div style="background:var(--s2);border:1.5px solid ${isSel?'var(--lime)':(openCount>0?'rgba(198,241,53,0.3)':'var(--border)')};border-radius:9px;padding:9px 10px;cursor:pointer;transition:border-color .15s;" onclick="selectDemoCoin('${sym}')">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
         <span style="font-weight:700;font-size:12px;">${sym}</span>
-        ${open?`<span style="font-family:'DM Mono',monospace;font-size:9px;padding:1px 5px;border-radius:3px;background:${open.dir==='long'?'rgba(198,241,53,0.12)':'rgba(255,61,90,0.12)'};color:${open.dir==='long'?'var(--lime)':'var(--red)'};">${open.dir.toUpperCase()}</span>`:''}
+        ${openCount>0?`<span style="font-family:'DM Mono',monospace;font-size:9px;padding:1px 6px;border-radius:8px;background:var(--lime);color:#000;font-weight:700;">${openCount}</span>`:''}
       </div>
       <div style="font-family:'DM Mono',monospace;font-size:13px;color:${isUp?'var(--lime)':'var(--red)'};">${p?'$'+fmtPrice(p):'—'}</div>
       <canvas id="demo-spark-${sym}" width="100" height="28" style="width:100%;height:28px;display:block;margin-top:5px;"></canvas>
@@ -1423,13 +1490,11 @@ function renderDemoUI(){
         Take Profit (+${S.settings.move}%): <span style="color:var(--lime);">$${selPrice?fmtPrice(selPrice*(1+move)):'—'}</span> (+$${risk.toFixed(0)}) &nbsp;|&nbsp;
         Stop Loss: <span style="color:var(--red);">$${selPrice?fmtPrice(selPrice*(1-move)):'—'}</span> (-$${risk.toFixed(0)})
       </div>
-      ${selOpen
-        ? `<div style="padding:10px;background:rgba(255,187,0,0.08);border:1px solid rgba(255,187,0,0.25);border-radius:8px;font-size:12px;color:var(--yellow);text-align:center;">Position already open for ${sel}. Close it first or select another coin.</div>`
-        : `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-            <button onclick="openDemoPosition('${sel}','long')" style="padding:12px;background:rgba(198,241,53,0.12);border:1.5px solid rgba(198,241,53,0.4);color:var(--lime);border-radius:9px;font-family:'Cabinet Grotesk',sans-serif;font-size:14px;font-weight:800;cursor:pointer;transition:all .2s;" onmouseover="this.style.background='rgba(198,241,53,0.22)'" onmouseout="this.style.background='rgba(198,241,53,0.12)'">📈 LONG</button>
-            <button onclick="openDemoPosition('${sel}','short')" style="padding:12px;background:rgba(255,61,90,0.1);border:1.5px solid rgba(255,61,90,0.35);color:var(--red);border-radius:9px;font-family:'Cabinet Grotesk',sans-serif;font-size:14px;font-weight:800;cursor:pointer;transition:all .2s;" onmouseover="this.style.background='rgba(255,61,90,0.2)'" onmouseout="this.style.background='rgba(255,61,90,0.1)'">📉 SHORT</button>
-          </div>`
-      }
+      ${selOpen?`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;margin-bottom:8px;">📊 ${DEMO.positions.filter(p=>p.sym===sel).length} position(s) open on ${sel} — you can open more</div>`:''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <button onclick="openDemoPosition('${sel}','long')" style="padding:12px;background:rgba(198,241,53,0.12);border:1.5px solid rgba(198,241,53,0.4);color:var(--lime);border-radius:9px;font-family:'Cabinet Grotesk',sans-serif;font-size:14px;font-weight:800;cursor:pointer;transition:all .2s;" onmouseover="this.style.background='rgba(198,241,53,0.22)'" onmouseout="this.style.background='rgba(198,241,53,0.12)'">📈 LONG</button>
+        <button onclick="openDemoPosition('${sel}','short')" style="padding:12px;background:rgba(255,61,90,0.1);border:1.5px solid rgba(255,61,90,0.35);color:var(--red);border-radius:9px;font-family:'Cabinet Grotesk',sans-serif;font-size:14px;font-weight:800;cursor:pointer;transition:all .2s;" onmouseover="this.style.background='rgba(255,61,90,0.2)'" onmouseout="this.style.background='rgba(255,61,90,0.1)'">📉 SHORT</button>
+      </div>
     </div>` : `
     <div style="background:var(--s1);border:1px dashed var(--border);border-radius:10px;padding:18px;text-align:center;margin-bottom:12px;">
       <div style="font-size:22px;margin-bottom:7px;">👆</div>
@@ -1439,7 +1504,11 @@ function renderDemoUI(){
 
     <!-- OPEN POSITIONS -->
     <div class="card">
-      <div class="card-head">Open Positions <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);font-weight:400;">${DEMO.positions.length} active</span></div>
+      <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>Open Positions <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);font-weight:400;">${DEMO.positions.length} active</span></span>
+        ${DEMO.positions.length>1?`<button onclick="closeAllDemo()" style="padding:4px 10px;background:rgba(255,61,90,0.1);border:1px solid rgba(255,61,90,0.3);color:var(--red);border-radius:6px;font-size:10px;cursor:pointer;font-family:'DM Mono',monospace;font-weight:600;">Close All</button>`:''}
+      </div>
+      ${DEMO.positions.length>0?`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-bottom:8px;">Used margin: <span style="color:var(--purple);">$${DEMO.positions.reduce((a,p)=>a+(p.margin||0),0).toFixed(0)}</span> / $${(DEMO.capital*0.9).toFixed(0)} available</div>`:''}
       <div id="demo-open-pos">${openPosHTML}</div>
     </div>
 
@@ -1587,39 +1656,72 @@ async function fetchMarket(force){
       isMetal:false
     }));
 
-    // Fetch Gold & Silver from frankfurter (free, no key)
-    // XAU and XAG priced per troy oz in USD
+    // Fetch Gold & Silver — real-time spot price per troy oz in USD
+    // Using multiple free APIs with fallback chain
     try{
-      const mResp=await fetch('https://api.frankfurter.app/latest?from=USD&to=XAU,XAG');
-      const mData=await mResp.json();
-      // Frankfurter gives USD per unit — invert for oz price
-      const goldOz=mData.rates&&mData.rates.XAU?Math.round(1/mData.rates.XAU*100)/100:1900;
-      const silverOz=mData.rates&&mData.rates.XAG?Math.round(1/mData.rates.XAG*100)/100:23;
-      // Estimate 24h change from typical daily vol
-      const goldChg=(Math.random()-0.48)*1.2; // ±1.2% typical
-      const silverChg=(Math.random()-0.48)*2.0;
+      let goldOz=null,silverOz=null,goldChg=0,silverChg=0;
+
+      // API 1: metals-api via allorigins proxy (no key needed)
+      try{
+        const [gResp,sResp]=await Promise.all([
+          fetch('https://api.allorigins.win/raw?url='+encodeURIComponent('https://data-asg.goldprice.org/dbXRates/USD')),
+          fetch('https://api.allorigins.win/raw?url='+encodeURIComponent('https://data-asg.goldprice.org/dbXRates/USD'))
+        ]);
+        const gData=await gResp.json();
+        if(gData&&gData.items&&gData.items[0]){
+          goldOz=gData.items[0].xauPrice;
+          silverOz=gData.items[0].xagPrice;
+          goldChg=gData.items[0].pcXau||0;
+          silverChg=gData.items[0].pcXag||0;
+        }
+      }catch(e1){}
+
+      // API 2: Fallback — CoinGecko for PAXG (gold token) & real silver
+      if(!goldOz){
+        try{
+          const cgResp=await fetch('https://api.coingecko.com/api/v3/simple/price?ids=pax-gold,silver&vs_currencies=usd&include_24hr_change=true');
+          const cgData=await cgResp.json();
+          if(cgData['pax-gold']) { goldOz=cgData['pax-gold'].usd; goldChg=cgData['pax-gold'].usd_24h_change||0; }
+          if(cgData['silver'])   { silverOz=cgData['silver'].usd; silverChg=cgData['silver'].usd_24h_change||0; }
+        }catch(e2){}
+      }
+
+      // API 3: Fallback — frankfurter (less accurate but always works)
+      if(!goldOz){
+        try{
+          const fResp=await fetch('https://api.frankfurter.app/latest?from=USD&to=XAU,XAG');
+          const fData=await fResp.json();
+          if(fData.rates&&fData.rates.XAU) goldOz=Math.round(1/fData.rates.XAU*100)/100;
+          if(fData.rates&&fData.rates.XAG) silverOz=Math.round(1/fData.rates.XAG*100)/100;
+        }catch(e3){}
+      }
+
+      // Final fallback static
+      goldOz=goldOz||3300; silverOz=silverOz||33;
+      goldChg=Math.round(goldChg*100)/100;
+      silverChg=Math.round(silverChg*100)/100;
+
       const metals=[
-        {id:'gold-xau',sym:'XAU',name:'Gold',price:goldOz,chg:goldChg,
+        {id:'gold-xau',sym:'XAU',name:'Gold (Troy Oz)',price:goldOz,chg:goldChg,
          mcap:13000000000000,vol:180000000000,rank:0,
          img:'',low24:goldOz*(1-0.006),high24:goldOz*(1+0.006),
-         spark:Array.from({length:40},(_,i)=>goldOz*(1+(Math.random()-0.5)*0.008)),
+         spark:Array.from({length:40},(_,i)=>goldOz*(1+(Math.random()-0.5)*0.006)),
          isMetal:true,icon:'🥇'},
-        {id:'silver-xag',sym:'XAG',name:'Silver',price:silverOz,chg:silverChg,
+        {id:'silver-xag',sym:'XAG',name:'Silver (Troy Oz)',price:silverOz,chg:silverChg,
          mcap:1400000000000,vol:20000000000,rank:0,
          img:'',low24:silverOz*(1-0.01),high24:silverOz*(1+0.01),
-         spark:Array.from({length:40},(_,i)=>silverOz*(1+(Math.random()-0.5)*0.012)),
+         spark:Array.from({length:40},(_,i)=>silverOz*(1+(Math.random()-0.5)*0.01)),
          isMetal:true,icon:'🥈'}
       ];
       S.marketData=[...metals,...S.marketData];
-      // Update prices for metals in myCoins
       metals.forEach(m=>{
         if(S.myCoins.find(c=>c.sym===m.sym)){
           S.prices[m.sym]={price:m.price,chg:m.chg,vol:m.vol,low24:m.low24,high24:m.high24};
         }
       });
-    }catch(me){ console.warn('Metals API fallback',me);
-      // Fallback static prices if API fails
-      [{sym:'XAU',name:'Gold',price:2350,chg:0.3,icon:'🥇'},{sym:'XAG',name:'Silver',price:29.5,chg:0.8,icon:'🥈'}].forEach(m=>{
+    }catch(me){
+      console.warn('Metals fetch failed',me);
+      [{sym:'XAU',name:'Gold (Troy Oz)',price:3300,chg:0.3,icon:'🥇'},{sym:'XAG',name:'Silver (Troy Oz)',price:33,chg:0.8,icon:'🥈'}].forEach(m=>{
         if(S.myCoins.find(c=>c.sym===m.sym)){
           S.prices[m.sym]={price:m.price,chg:m.chg,vol:0,low24:m.price*0.994,high24:m.price*1.006};
         }
@@ -2835,7 +2937,7 @@ function updateMeter(){
   else{fill.style.background='var(--red)';lbl.style.color='var(--red)';lbl.textContent='⛔ NOT READY';}
   document.getElementById('meter-sub').textContent=`${passed} of ${total}`;
 }
-function resetChk(){S.checks={};save();renderChecklist();toast('Checklist reset ↺');}
+function resetChk(){S.checks={};save();sbSaveChecklist();renderChecklist();toast('Checklist reset ↺');}
 function editChk(id){
   const item=S.checkItems.find(x=>x.id===id);if(!item)return;
   currentEdit={type:'chk',id};document.getElementById('chk-title').value=item.text;document.getElementById('chk-hint').value=item.hint||'';
@@ -2871,7 +2973,7 @@ function editRule(cat,id){
   document.getElementById('modal-title').textContent='Edit Rule';document.getElementById('modal-save-btn').textContent='Update';document.getElementById('modal-save-btn').style.display='';
   showForm('rule');document.getElementById('modal-overlay').classList.add('open');
 }
-function deleteRule(cat,id){if(!confirm('Delete?'))return;S.rules[cat]=(S.rules[cat]||[]).filter(x=>x.id!==id);save();renderRules();toast('Deleted');}
+function deleteRule(cat,id){if(!confirm('Delete?'))return;S.rules[cat]=(S.rules[cat]||[]).filter(x=>x.id!==id);save();sbSaveSettings();renderRules();toast('Deleted');}
 
 // ══════════════════════════════════════
 // MODAL
@@ -2898,7 +3000,7 @@ function saveModal(){
     const hint=document.getElementById('chk-hint').value.trim();
     if(currentEdit){const item=S.checkItems.find(x=>x.id===currentEdit.id);if(item){item.text=text;item.hint=hint;}}
     else S.checkItems.push({id:'c'+Date.now(),text,hint});
-    save();renderChecklist();closeModal();toast(currentEdit?'Updated ✓':'Added ✓');
+    save();sbSaveChecklist();renderChecklist();closeModal();toast(currentEdit?'Updated ✓':'Added ✓');
   }else if(type==='rule'){
     const title=document.getElementById('rule-title').value.trim();if(!title){toast('Title required');return;}
     const cat=document.getElementById('rule-cat').value||currentRuleCat;
@@ -2917,6 +3019,31 @@ function applySettings(){
   const st=S.settings;
   ['cap','target','risk','move','tpd','days','dloss','mloss'].forEach(k=>{const el=document.getElementById('st-'+k);if(el)el.value=st[k];});
   recalcTargets();
+  // Apply saved theme
+  const saved=localStorage.getItem('cdp_theme')||'night';
+  applyTheme(saved,false);
+}
+
+function setTheme(t){
+  localStorage.setItem('cdp_theme',t);
+  applyTheme(t,true);
+}
+
+function applyTheme(t,animate){
+  const root=document.documentElement;
+  if(animate){root.style.transition='background .3s,color .3s';setTimeout(()=>root.style.transition='',400);}
+  ['night','evening','day'].forEach(n=>{
+    // Nav buttons
+    const btn=document.getElementById('theme-'+n);
+    if(btn) btn.classList.toggle('active',n===t);
+    // Settings panel buttons
+    const sb=document.getElementById('st-theme-'+n);
+    if(sb){
+      sb.style.borderColor=n===t?'var(--lime)':'var(--border)';
+      sb.style.background=n===t?'rgba(198,241,53,0.08)':'var(--s2)';
+    }
+  });
+  root.setAttribute('data-theme',t);
 }
 function saveSettings(){
   S.settings={capital:parseFloat(document.getElementById('st-cap').value)||10000,target:parseFloat(document.getElementById('st-target').value)||10,risk:parseFloat(document.getElementById('st-risk').value)||0.5,move:parseFloat(document.getElementById('st-move').value)||5,tpd:parseInt(document.getElementById('st-tpd').value)||3,days:parseInt(document.getElementById('st-days').value)||30,dloss:parseFloat(document.getElementById('st-dloss').value)||150,mloss:parseFloat(document.getElementById('st-mloss').value)||800};
@@ -3684,6 +3811,8 @@ async function authInit(){
 
 function guideInit(){}
 load();
+// Apply theme immediately on load (before auth)
+(function(){const t=localStorage.getItem('cdp_theme')||'night';document.documentElement.setAttribute('data-theme',t);})();
 authInit();</script>
 
 <script>
@@ -3749,7 +3878,7 @@ if(/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.navigator.standalone){
 
 <script>
 const supabase = window.supabase.createClient(
-  "https://jqtawulzhfmierbnckuz.supabase.com",
+  "https://jqtawulzhfmierbnckuz.supabase.co",
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxdGF3dWx6aGZtaWVyYm5ja3V6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0MDM2MjksImV4cCI6MjA5Njk3OTYyOX0.3IHI8eFsupfLBgBKjbgXOyCWplrd3daPH-2DX8UISAE"
 );
 </script>

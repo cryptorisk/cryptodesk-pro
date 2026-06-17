@@ -3848,21 +3848,15 @@ load();
 authInit();</script>
 
 <script>
-// ── SERVICE WORKER ──
-// First unregister any old SW, then register fresh
+// ── SERVICE WORKER — DISABLED ──
+// Unregister all SWs and clear all caches
 if('serviceWorker' in navigator){
-  // Unregister all old service workers first
   navigator.serviceWorker.getRegistrations().then(regs=>{
     regs.forEach(r=>r.unregister());
   });
-  // Register fresh SW after page load
-  window.addEventListener('load',()=>{
-    navigator.serviceWorker.register('sw.js?v=5').then(reg=>{
-      console.log('SW registered v5');
-      // Force update immediately
-      reg.update();
-    }).catch(e=>console.log('SW error:',e));
-  });
+}
+if('caches' in window){
+  caches.keys().then(keys=>keys.forEach(k=>caches.delete(k)));
 }
 
 // ── PWA INSTALL PROMPT ──

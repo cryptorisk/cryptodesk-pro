@@ -3836,12 +3836,20 @@ load();
 authInit();</script>
 
 <script>
-// ── SERVICE WORKER REGISTRATION ──
+// ── SERVICE WORKER ──
+// First unregister any old SW, then register fresh
 if('serviceWorker' in navigator){
+  // Unregister all old service workers first
+  navigator.serviceWorker.getRegistrations().then(regs=>{
+    regs.forEach(r=>r.unregister());
+  });
+  // Register fresh SW after page load
   window.addEventListener('load',()=>{
-    navigator.serviceWorker.register('sw.js').then(()=>{
-      console.log('SW registered');
-    }).catch(()=>{});
+    navigator.serviceWorker.register('sw.js?v=5').then(reg=>{
+      console.log('SW registered v5');
+      // Force update immediately
+      reg.update();
+    }).catch(e=>console.log('SW error:',e));
   });
 }
 

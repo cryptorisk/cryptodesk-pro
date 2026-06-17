@@ -3638,42 +3638,55 @@ async function doSignup(){
   if(pass.length<6){showAuthError('Password must be at least 6 characters');return;}
   if(pass!==pass2){showAuthError('Passwords do not match');return;}
   if(!/^[a-z0-9_]+$/.test(user)){showAuthError('Username: only letters, numbers, underscore');return;}
-  showAuthError('⏳ Creating account...');
-  const{data,error}=await supabase.auth.signUp({
-    email,password:pass,
-    options:{
-      emailRedirectTo:'https://cryptorisk.github.io/cryptodesk-pro/',
-      data:{name,username:user,avatar:name.charAt(0).toUpperCase()}
-    }
-  });
+  showAuthError('⏳ Step 1: Creating account...');
+  let data,error;
+  try{
+    const res=await supabase.auth.signUp({
+      email,password:pass,
+      options:{
+        emailRedirectTo:'https://cryptorisk.github.io/cryptodesk-pro/',
+        data:{name,username:user,avatar:name.charAt(0).toUpperCase()}
+      }
+    });
+    data=res.data; error=res.error;
+  }catch(e){showAuthError('❌ signUp exception: '+e.message);return;}
+
   if(error){
-    if(error.message&&error.message.toLowerCase().includes('weak_password')||error.message&&error.message.toLowerCase().includes('weak password')||error.message&&error.message.toLowerCase().includes('password should contain')){
+    if(error.message&&(error.message.toLowerCase().includes('weak_password')||error.message.toLowerCase().includes('weak password')||error.message.toLowerCase().includes('password should contain'))){
       showAuthError('❌ Weak password — must include uppercase, lowercase, number and special character (!@#$)');
     } else {
-      showAuthError(error.message);
+      showAuthError('❌ '+error.message);
     }
     return;
   }
+
   const u=data.user;
-  // Duplicate email check
-  if(u&&u.identities&&u.identities.length===0){
+  if(!u){showAuthError('❌ No user returned from signUp');return;}
+
+  if(u.identities&&u.identities.length===0){
     showAuthError('⚠️ This email is already registered. Please sign in.');
     return;
   }
-  // Try auto sign-in (works if email confirmation is disabled)
-  showAuthError('⏳ Signing in...');
-  const{data:loginData,error:loginError}=await supabase.auth.signInWithPassword({email,password:pass});
+
+  showAuthError('⏳ Step 2: Signing in...');
+  let loginData,loginError;
+  try{
+    const res2=await supabase.auth.signInWithPassword({email,password:pass});
+    loginData=res2.data; loginError=res2.error;
+  }catch(e){showAuthError('❌ signIn exception: '+e.message);return;}
+
   if(loginError){
-    // Email confirmation required
-    showAuthError('✅ Account created! Check your email to confirm, then sign in.');
+    showAuthError('✅ Account created! Check your email to confirm, then sign in. ('+loginError.message+')');
     document.querySelectorAll('.auth-tab').forEach(b=>b.classList.remove('on'));
     document.querySelector('.auth-tab').classList.add('on');
     document.getElementById('auth-form-login').style.display='block';
     document.getElementById('auth-form-signup').style.display='none';
     return;
   }
+
+  showAuthError('⏳ Step 3: Loading profile...');
   const lu=loginData.user;
-  await supabase.from('profiles').upsert({uid:lu.id,name,username:user,avatar:name.charAt(0).toUpperCase()});
+  try{await supabase.from('profiles').upsert({uid:lu.id,name,username:user,avatar:name.charAt(0).toUpperCase()});}catch(e){}
   const profile={uid:lu.id,name,user,email,avatar:name.charAt(0).toUpperCase()};
   await enterApp(profile);
 }

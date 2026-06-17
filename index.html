@@ -2,6 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<script>
+// Kill ALL service workers immediately before anything loads
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(regs=>{
+    regs.forEach(r=>{r.unregister();console.log('SW killed:',r.scope);});
+  });
+  // Also clear all caches
+  if('caches' in window){
+    caches.keys().then(keys=>keys.forEach(k=>caches.delete(k)));
+  }
+}
+</script>
   <meta name="theme-color" content="#070810">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -466,7 +478,7 @@ textarea{resize:vertical;min-height:52px;font-size:12px;}
       <!-- SIGNUP FORM -->
       <div id="auth-form-signup" style="display:none;">
         <div class="auth-field"><label>Full Name</label><input type="text" id="signup-name" placeholder="Your name"></div>
-        <div class="auth-field"><label>Username</label><input type="text" id="signup-user" placeholder="Choose a username" autocomplete="username"></div>
+
         <div class="auth-field"><label>Email</label><input type="email" id="signup-email" placeholder="your@email.com" autocomplete="email"></div>
         <div class="auth-field"><label>Password</label><input type="password" id="signup-pass" placeholder="Min 6 characters" autocomplete="new-password"></div>
         <div class="auth-field"><label>Confirm Password</label><input type="password" id="signup-pass2" placeholder="Repeat password" autocomplete="new-password" onkeydown="if(event.key==='Enter')doSignup()"></div>
@@ -3630,14 +3642,14 @@ function showAuthError(msg){
 // ── SUPABASE AUTH ──
 async function doSignup(){
   const name=document.getElementById('signup-name').value.trim();
-  const user=document.getElementById('signup-user').value.trim().toLowerCase();
   const email=document.getElementById('signup-email').value.trim().toLowerCase();
   const pass=document.getElementById('signup-pass').value;
   const pass2=document.getElementById('signup-pass2').value;
-  if(!name||!user||!email||!pass){showAuthError('All fields are required');return;}
+  // Generate username from name
+  const user=name.toLowerCase().replace(/[^a-z0-9]/g,'_').slice(0,20)||'user';
+  if(!name||!email||!pass){showAuthError('All fields are required');return;}
   if(pass.length<6){showAuthError('Password must be at least 6 characters');return;}
   if(pass!==pass2){showAuthError('Passwords do not match');return;}
-  if(!/^[a-z0-9_]+$/.test(user)){showAuthError('Username: only letters, numbers, underscore');return;}
   showAuthError('⏳ Step 1: Creating account...');
   let data,error;
   try{

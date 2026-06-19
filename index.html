@@ -1380,6 +1380,12 @@ function toggleDemoCustom(){
   if(DEMO.customMode) setTimeout(renderDemoCustomPreview,50);
 }
 
+function setDemoMode(mode){
+  DEMO.customMode = (mode==='custom');
+  renderDemoUI();
+  if(DEMO.customMode) setTimeout(renderDemoCustomPreview,50);
+}
+
 function renDemoCustomVal(id,def){const el=document.getElementById(id);return el?parseFloat(el.value)||def:def;}
 
 function renderDemoCustomPreview(){
@@ -1627,6 +1633,18 @@ function renderDemoUI(){
     ${sel ? `
     <div class="card">
       <div class="card-head">Open Demo Position — ${sel}/USDT</div>
+
+      <!-- MODE SELECTOR -->
+      <div style="display:flex;gap:6px;margin-bottom:12px;background:var(--s2);padding:4px;border-radius:10px;">
+        <button onclick="setDemoMode('strategy')" style="flex:1;padding:9px;border-radius:7px;border:none;cursor:pointer;font-family:'Cabinet Grotesk',sans-serif;font-size:12px;font-weight:700;transition:all .2s;background:${!DEMO.customMode?'var(--lime)':'transparent'};color:${!DEMO.customMode?'#000':'var(--muted)'};">🎯 Strategy</button>
+        <button onclick="setDemoMode('custom')" style="flex:1;padding:9px;border-radius:7px;border:none;cursor:pointer;font-family:'Cabinet Grotesk',sans-serif;font-size:12px;font-weight:700;transition:all .2s;background:${DEMO.customMode?'var(--lime)':'transparent'};color:${DEMO.customMode?'#000':'var(--muted)'};">⚙️ Custom</button>
+      </div>
+
+      ${!DEMO.customMode?`
+      <!-- STRATEGY MODE -->
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;padding:6px 10px;background:rgba(198,241,53,0.06);border-radius:7px;border-left:3px solid var(--lime);">
+        Using <b style="color:var(--text);">${(STRATEGY_PRESETS[selectedPreset]||STRATEGY_PRESETS.moderate).label}</b>: risk ${S.settings.risk}% · target move ${S.settings.move}% · ${coin.lev}x leverage
+      </div>
       <div style="background:var(--s2);border-radius:8px;padding:10px;margin-bottom:10px;font-family:'DM Mono',monospace;font-size:11px;line-height:2;color:var(--muted);">
         Entry: <span style="color:var(--text);">$${selPrice?fmtPrice(selPrice):'—'}</span> &nbsp;|&nbsp;
         Position: <span style="color:var(--text);">$${posSize.toFixed(0)}</span> &nbsp;|&nbsp;
@@ -1635,14 +1653,15 @@ function renderDemoUI(){
         Stop Loss: <span style="color:var(--red);">$${selPrice?fmtPrice(selPrice*(1-move)):'—'}</span> (-$${risk.toFixed(0)})
       </div>
       ${selOpen?`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;margin-bottom:8px;">📊 ${DEMO.positions.filter(p=>p.sym===sel).length} position(s) open on ${sel} — you can open more</div>`:''}
-
-      <!-- Custom mode toggle -->
-      <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;cursor:pointer;font-size:12px;color:var(--text);">
-        <input type="checkbox" id="demo-custom-toggle" ${DEMO.customMode?'checked':''} onchange="toggleDemoCustom()" style="width:16px;height:16px;cursor:pointer;">
-        <span>⚙️ Custom mode (set your own capital, leverage & TP/SL)</span>
-      </label>
-
-      ${DEMO.customMode?`
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <button onclick="openDemoPosition('${sel}','long')" style="padding:12px;background:rgba(198,241,53,0.12);border:1.5px solid rgba(198,241,53,0.4);color:var(--lime);border-radius:9px;font-family:'Cabinet Grotesk',sans-serif;font-size:14px;font-weight:800;cursor:pointer;transition:all .2s;">📈 LONG</button>
+        <button onclick="openDemoPosition('${sel}','short')" style="padding:12px;background:rgba(255,61,90,0.1);border:1.5px solid rgba(255,61,90,0.35);color:var(--red);border-radius:9px;font-family:'Cabinet Grotesk',sans-serif;font-size:14px;font-weight:800;cursor:pointer;transition:all .2s;">📉 SHORT</button>
+      </div>
+      `:`
+      <!-- CUSTOM MODE -->
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;padding:6px 10px;background:rgba(0,212,255,0.06);border-radius:7px;border-left:3px solid var(--cyan);">
+        Set all values yourself — margin, leverage and your own TP/SL targets.
+      </div>
       <div style="background:var(--s2);border-radius:8px;padding:11px;margin-bottom:10px;">
         <div class="calc-grid" style="margin-bottom:8px;">
           <div class="field"><label>Margin ($)</label><input type="number" id="dc-margin" value="${DEMO.customMargin||100}" oninput="renderDemoCustomPreview()"></div>
@@ -1652,14 +1671,10 @@ function renderDemoUI(){
         </div>
         <div id="dc-preview" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);line-height:1.7;"></div>
       </div>
+      ${selOpen?`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;margin-bottom:8px;">📊 ${DEMO.positions.filter(p=>p.sym===sel).length} position(s) open on ${sel} — you can open more</div>`:''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
         <button onclick="openDemoCustom('${sel}','long')" style="padding:12px;background:rgba(198,241,53,0.12);border:1.5px solid rgba(198,241,53,0.4);color:var(--lime);border-radius:9px;font-family:'Cabinet Grotesk',sans-serif;font-size:14px;font-weight:800;cursor:pointer;">📈 LONG</button>
         <button onclick="openDemoCustom('${sel}','short')" style="padding:12px;background:rgba(255,61,90,0.1);border:1.5px solid rgba(255,61,90,0.35);color:var(--red);border-radius:9px;font-family:'Cabinet Grotesk',sans-serif;font-size:14px;font-weight:800;cursor:pointer;">📉 SHORT</button>
-      </div>
-      `:`
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        <button onclick="openDemoPosition('${sel}','long')" style="padding:12px;background:rgba(198,241,53,0.12);border:1.5px solid rgba(198,241,53,0.4);color:var(--lime);border-radius:9px;font-family:'Cabinet Grotesk',sans-serif;font-size:14px;font-weight:800;cursor:pointer;transition:all .2s;">📈 LONG</button>
-        <button onclick="openDemoPosition('${sel}','short')" style="padding:12px;background:rgba(255,61,90,0.1);border:1.5px solid rgba(255,61,90,0.35);color:var(--red);border-radius:9px;font-family:'Cabinet Grotesk',sans-serif;font-size:14px;font-weight:800;cursor:pointer;transition:all .2s;">📉 SHORT</button>
       </div>
       `}
     </div>` : `
@@ -3963,8 +3978,9 @@ authInit();</script>
 // ══════════════════════════════════════
 // AI TRADING ASSISTANT (Gemini)
 // ══════════════════════════════════════
-const GEMINI_API_KEY = "AQ.Ab8RN6IHcJgk8tV1BcCoMIX16-c76PeYJS1D4YLjI1H9UkWq9A";
-const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent";
+// AI requests go through our secure Supabase Edge Function (API key stays server-side)
+const AI_FUNCTION_URL = "https://jqtawulzhfmierbnckuz.supabase.co/functions/v1/gemini-chat";
+const SUPABASE_ANON_KEY_FOR_AI = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxdGF3dWx6aGZtaWVyYm5ja3V6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0MDM2MjksImV4cCI6MjA5Njk3OTYyOX0.3IHI8eFsupfLBgBKjbgXOyCWplrd3daPH-2DX8UISAE";
 let aiChatHistory = [];
 let aiChatOpen = false;
 
@@ -4052,22 +4068,20 @@ async function sendAIChat(){
   });
 
   try{
-    const resp = await fetch(GEMINI_URL,{
+    const resp = await fetch(AI_FUNCTION_URL,{
       method:'POST',
-      headers:{'Content-Type':'application/json','X-goog-api-key':GEMINI_API_KEY},
-      body:JSON.stringify({
-        contents:[{role:'user',parts:[{text:systemPrompt+'\n\nUser question: '+text}]}],
-        generationConfig:{temperature:0.7,maxOutputTokens:500}
-      })
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':'Bearer '+SUPABASE_ANON_KEY_FOR_AI
+      },
+      body:JSON.stringify({ prompt: systemPrompt+'\n\nUser question: '+text })
     });
     typing.remove();
-    if(!resp.ok){
-      const errTxt = await resp.text();
-      throw new Error('HTTP '+resp.status);
-    }
     const data = await resp.json();
-    const reply = data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts[0].text
-      ? data.candidates[0].content.parts[0].text : 'Sorry, I could not generate a response. Try rephrasing.';
+    if(!resp.ok || data.error){
+      throw new Error(data.error || ('HTTP '+resp.status));
+    }
+    const reply = data.reply || 'Sorry, I could not generate a response. Try rephrasing.';
 
     const bm = document.createElement('div');
     bm.className = 'ai-msg ai-msg-bot';

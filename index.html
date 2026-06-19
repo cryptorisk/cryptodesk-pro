@@ -49,6 +49,7 @@ if('serviceWorker' in navigator){
 [data-theme="day"] input,[data-theme="day"] select,[data-theme="day"] textarea{color:var(--text);}
 [data-theme="day"] .auth-card{box-shadow:0 8px 30px rgba(0,0,0,0.1);}
 [data-theme="day"] .auth-field input{color:var(--text);}
+[data-theme="day"] .auth-intro{color:#5a5d72;}
 [data-theme="day"] .toast-info{background:#fff;color:var(--text);}
 [data-theme="day"] #ai-chat-fab{box-shadow:0 4px 16px rgba(0,0,0,0.18);}
 [data-theme="day"] .ai-msg-bot{background:#fff;}
@@ -460,6 +461,7 @@ textarea{resize:vertical;min-height:52px;font-size:12px;}
 .auth-logo-name{font-family:'Clash Display',sans-serif;font-size:32px;font-weight:700;letter-spacing:-1px;}
 .auth-logo-name em{color:var(--lime);font-style:normal;}
 .auth-logo-sub{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:3px;margin-top:4px;}
+.auth-intro{text-align:center;font-size:12px;line-height:1.6;color:var(--muted);max-width:340px;margin:14px auto 18px;padding:0 8px;}
 .auth-card{background:var(--s1);border:1px solid var(--border2);border-radius:18px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.5);}
 .auth-tabs{display:flex;gap:3px;background:var(--s2);border-radius:10px;padding:3px;margin-bottom:22px;}
 .auth-tab{flex:1;padding:8px;text-align:center;font-family:'Cabinet Grotesk',sans-serif;font-size:13px;font-weight:700;border-radius:8px;cursor:pointer;border:none;background:none;color:var(--muted);transition:all .2s;}
@@ -525,6 +527,9 @@ textarea{resize:vertical;min-height:52px;font-size:12px;}
       <div class="auth-logo-name">CRYPTO<em>DESK</em></div>
       <div class="auth-logo-sub">PRO · By MM</div>
     </div>
+    <div class="auth-intro">
+      📊 A complete crypto futures trading toolkit — track live prices, calculate risk &amp; position size, log your trades, and practice with paper trading. Free to use.
+    </div>
     <div class="auth-card">
       <div class="auth-tabs">
         <button class="auth-tab on" onclick="authTab('login',this)">Sign In</button>
@@ -544,7 +549,9 @@ textarea{resize:vertical;min-height:52px;font-size:12px;}
         <div class="auth-field"><label>Full Name</label><input type="text" id="signup-name" placeholder="Your name"></div>
 
         <div class="auth-field"><label>Email</label><input type="email" id="signup-email" placeholder="your@email.com" autocomplete="email"></div>
-        <div class="auth-field"><label>Password</label><input type="password" id="signup-pass" placeholder="Min 6 characters" autocomplete="new-password"></div>
+        <div class="auth-field"><label>Password</label><input type="password" id="signup-pass" placeholder="Min 8 chars, upper+lower+digit" autocomplete="new-password">
+          <div style="font-size:10px;color:var(--muted);margin-top:4px;">Needs 8+ characters with uppercase, lowercase &amp; a number</div>
+        </div>
         <div class="auth-field"><label>Confirm Password</label><input type="password" id="signup-pass2" placeholder="Repeat password" autocomplete="new-password" onkeydown="if(event.key==='Enter')doSignup()"></div>
         <button class="auth-btn" onclick="doSignup()">Create Account →</button>
       </div>
@@ -3757,7 +3764,8 @@ async function doSignup(){
   // Generate username from name
   const user=name.toLowerCase().replace(/[^a-z0-9]/g,'_').slice(0,20)||'user';
   if(!name||!email||!pass){showAuthError('All fields are required');return;}
-  if(pass.length<6){showAuthError('Password must be at least 6 characters');return;}
+  if(pass.length<8){showAuthError('Password must be at least 8 characters');return;}
+  if(!/[a-z]/.test(pass)||!/[A-Z]/.test(pass)||!/[0-9]/.test(pass)){showAuthError('Password needs an uppercase letter, a lowercase letter, and a number');return;}
   if(pass!==pass2){showAuthError('Passwords do not match');return;}
   showAuthError('⏳ Step 1: Creating account...');
   let data,error;
@@ -3774,7 +3782,7 @@ async function doSignup(){
 
   if(error){
     if(error.message&&(error.message.toLowerCase().includes('weak_password')||error.message.toLowerCase().includes('weak password')||error.message.toLowerCase().includes('password should contain'))){
-      showAuthError('❌ Weak password — must include uppercase, lowercase, number and special character (!@#$)');
+      showAuthError('❌ Weak password — must be 8+ characters with uppercase, lowercase and a number');
     } else {
       showAuthError('❌ '+error.message);
     }

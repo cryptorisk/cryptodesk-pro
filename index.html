@@ -1422,7 +1422,14 @@ const DEMO = {
   customSL: 3
 };
 
-const DEMO_COINS = ['BTC','ETH','SOL','BNB','AVAX'];
+// Demo coins mirror the user's My Coins list (so Demo and My Coins stay in sync).
+// Falls back to the 5 built-in coins if My Coins is somehow empty.
+function getDemoCoins(){
+  const list = (S.myCoins && S.myCoins.length) ? S.myCoins.map(c=>c.sym) : ['BTC','ETH','SOL','BNB','AVAX'];
+  return list;
+}
+// Backwards-compatible alias used throughout the demo code
+Object.defineProperty(window, 'DEMO_COINS', { get:getDemoCoins, configurable:true });
 
 // ── Demo persistence helpers ──
 function saveDemo(){
@@ -1497,8 +1504,25 @@ function loadDemo(){
 
 function initDemo(){
   loadDemo();
+  seedDemoPrices();
   if(!DEMO.running) startDemoTicker();
   renderDemoUI();
+}
+
+// Seeds a starting price + tick history for any demo coin that doesn't have one yet.
+// Safe to call repeatedly — only fills in missing coins (e.g. ones just added to My Coins).
+function seedDemoPrices(){
+  DEMO_COINS.forEach(sym=>{
+    const live = S.prices[sym];
+    const base = live&&live.price ? live.price : {BTC:67000,ETH:3200,SOL:145,BNB:580,AVAX:38}[sym]||100;
+    if(!DEMO.prices[sym]) DEMO.prices[sym] = base;
+    if(!DEMO.ticks[sym]||DEMO.ticks[sym].length<2){
+      DEMO.ticks[sym] = Array.from({length:40},(_,i)=>{
+        const noise=(Math.random()-0.5)*0.012;
+        return DEMO.prices[sym]*(1+noise*(40-i)/40);
+      });
+    }
+  });
 }
 
 function startDemoTicker(){
@@ -2337,6 +2361,7 @@ function addToMyCoins(sym,name,img,price,chg){
   const lev=vol>6?8:10;
   S.myCoins.push({sym,name,lev,vol,icon:sym.charAt(0),img});
   S.prices[sym]={price,chg,vol:0};
+  if(typeof seedDemoPrices==='function') seedDemoPrices(); // keep Demo in sync with My Coins
   save();renderMyCoins();renderMarketTable();renderPricesTab();renderPairButtons();updateCoinDropdowns();
   toast('✅ '+sym+' added to My Coins');
 }
@@ -2353,8 +2378,15 @@ function addCoinFromDetail(sym){
 let _lastFilteredData=null;
 
 function removeFromMyCoins(sym){
+  // Block removal if there's an open demo position on this coin (it would be orphaned)
+  if(typeof DEMO!=='undefined' && DEMO.positions && DEMO.positions.some(p=>p.sym===sym)){
+    toast('⚠️ Close your open '+sym+' demo position first');
+    return;
+  }
   if(!confirm('Remove '+sym+' from My Coins?'))return;
   S.myCoins=S.myCoins.filter(c=>c.sym!==sym);
+  // Clean up demo price/tick state for the removed coin
+  if(typeof DEMO!=='undefined'){ try{ delete DEMO.prices[sym]; delete DEMO.ticks[sym]; }catch(e){} }
   save();renderMyCoins();renderMarketTable();renderPricesTab();renderPairButtons();updateCoinDropdowns();
   toast(sym+' removed');
 }

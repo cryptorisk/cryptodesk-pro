@@ -1168,7 +1168,7 @@ async function sbClearTrades(){
 // ══════════════════════════════════════
 // TABS
 // ══════════════════════════════════════
-function tab(id){
+function tab(id,fromPop){
   const ids=['coins','prices','calc','demo','trade','playbook','settings'];
   document.querySelectorAll('.nav-btn').forEach((b,i)=>b.classList.toggle('on',ids[i]===id));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'));
@@ -1180,6 +1180,8 @@ function tab(id){
   if(id==='demo'){initDemo();}
   if(id==='playbook'){renderChecklist();renderRules();renderTechCoinDropdown();renderTechTFPills();}
   if(id==='settings')applySettings();
+  // Push to browser history so Android back button navigates tabs instead of closing the app
+  if(!fromPop) pushNavState({view:'tab',id});
 }
 
 // Sub-tab: Trade Book
@@ -4115,6 +4117,49 @@ async function sendAIChat(){
   }
 }
 
+
+// ── ANDROID/MOBILE BACK BUTTON NAVIGATION ──
+// Makes the hardware/gesture back button navigate within the app (tabs, modals)
+// instead of immediately closing the app — important for TWA/Play Store builds.
+let _navDepth = 0;
+
+function pushNavState(state){
+  _navDepth++;
+  try{ history.pushState({navDepth:_navDepth, ...state}, '', '#'+(state.view||'app')); }catch(e){}
+}
+
+function closeTopOverlay(){
+  // Returns true if something was closed (modal/overlay), false if nothing to close
+  const aiChat = document.getElementById('ai-chat-overlay');
+  if(aiChat && aiChat.style.display!=='none'){ toggleAIChat(); return true; }
+
+  const guide = document.getElementById('guide-overlay');
+  if(guide && guide.style.display!=='none' && guide.style.display!==''){ closeGuide(); return true; }
+
+  const coinDetail = document.getElementById('form-coin-detail');
+  if(coinDetail && coinDetail.style.display==='block'){ showForm(null); return true; }
+
+  const modal = document.getElementById('modal-overlay');
+  if(modal && modal.classList.contains('open')){ closeModal(); return true; }
+
+  return false;
+}
+
+window.addEventListener('popstate', (e)=>{
+  // First priority: close any open overlay/modal instead of navigating tabs
+  if(closeTopOverlay()) return;
+
+  // Otherwise navigate to the tab encoded in history state (if any)
+  const state = e.state;
+  if(state && state.view==='tab' && state.id){
+    tab(state.id, true);
+  }
+  // If there's no more state (back to the very first entry), let the browser/TWA
+  // handle it naturally (this exits the app on Android, which is correct here).
+});
+
+// Seed the initial history state so the first back press has somewhere to land
+pushNavState({view:'tab', id:'coins'});
 
 // ── PULL TO REFRESH ──
 (function(){

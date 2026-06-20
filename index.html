@@ -1492,6 +1492,14 @@ function startDemoTicker(){
     const live = S.prices[sym];
     const base = live&&live.price ? live.price : {BTC:67000,ETH:3200,SOL:145,BNB:580,AVAX:38}[sym]||100;
     if(!DEMO.prices[sym]) DEMO.prices[sym] = base;
+    // One-time correction: if a previously-saved simulated price has drifted far
+    // (>15%) from the real market price, snap it back — but only for coins with
+    // no open position (so we never distort an active trade's live P&L).
+    const hasOpenPos = DEMO.positions.some(p=>p.sym===sym);
+    if(!hasOpenPos && live && live.price && DEMO.prices[sym]){
+      const diffPct = Math.abs(DEMO.prices[sym]-live.price)/live.price;
+      if(diffPct>0.15) DEMO.prices[sym]=live.price;
+    }
     if(!DEMO.ticks[sym]||DEMO.ticks[sym].length<2){
       DEMO.ticks[sym] = Array.from({length:40},(_,i)=>{
         const noise=(Math.random()-0.5)*0.012;
@@ -1506,7 +1514,14 @@ function startDemoTicker(){
       const coin = S.myCoins.find(c=>c.sym===sym)||{vol:5};
       const volatility = (coin.vol||5)/100/100;
       const drift = (Math.random()-0.48)*volatility;
-      const newPrice = DEMO.prices[sym]*(1+drift);
+      let newPrice = DEMO.prices[sym]*(1+drift);
+      // Mean-reversion: gently pull the simulated price back toward the real live
+      // market price, so it stays realistic and never drifts far away over time.
+      const live = S.prices[sym];
+      if(live && live.price){
+        const pullStrength = 0.03; // 3% of the gap is closed on every tick
+        newPrice = newPrice + (live.price - newPrice) * pullStrength;
+      }
       DEMO.prices[sym] = newPrice;
       DEMO.ticks[sym].push(newPrice);
       if(DEMO.ticks[sym].length>60) DEMO.ticks[sym].shift();

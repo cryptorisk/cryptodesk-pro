@@ -107,6 +107,9 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .card-head::before{content:'';display:block;width:3px;height:12px;background:var(--lime);border-radius:2px;flex-shrink:0;}
 .field{display:flex;flex-direction:column;gap:4px;}
 .field-hint{font-size:10px;color:var(--muted);line-height:1.4;margin-top:-1px;}
+.lang-opt-btn{flex:1;padding:12px;background:var(--s2);border:1.5px solid var(--border2);border-radius:10px;color:var(--text);font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;font-family:'Cabinet Grotesk',sans-serif;}
+.lang-opt-btn.active{border-color:var(--lime);background:rgba(198,241,53,0.1);color:var(--lime);}
+html[lang="fa"] .lang-opt-btn{font-family:'Vazirmatn',sans-serif;}
 label{font-size:9px;font-weight:700;color:var(--muted);letter-spacing:2px;text-transform:uppercase;}
 input,select,textarea{background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:9px 11px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;transition:border-color .2s;width:100%;}
 input:focus,select:focus,textarea:focus{border-color:var(--lime);}
@@ -595,6 +598,9 @@ en: {
   pd_switch_profile: "Switch Profile",
   pd_signout: "Sign Out",
 
+  // Settings
+  settings_language: "Language",
+
   // Common buttons / words
   btn_save: "Save",
   btn_cancel: "Cancel",
@@ -654,6 +660,8 @@ fa: {
   pd_export_data: "خروجی گرفتن از داده‌ها",
   pd_switch_profile: "تغییر پروفایل",
   pd_signout: "خروج از حساب",
+
+  settings_language: "زبان",
 
   btn_save: "ذخیره",
   btn_cancel: "انصراف",
@@ -1072,6 +1080,13 @@ function applyTranslations(){
 
 <!-- ═══ SETTINGS ═══ -->
 <div class="panel" id="panel-settings">
+  <div class="card">
+    <div class="card-head">🌐 <span data-i18n="settings_language">Language</span></div>
+    <div style="display:flex;gap:10px;margin-top:4px;">
+      <button id="lang-btn-en" onclick="switchLanguage('en')" class="lang-opt-btn">🇬🇧 English</button>
+      <button id="lang-btn-fa" onclick="switchLanguage('fa')" class="lang-opt-btn">🇮🇷 فارسی</button>
+    </div>
+  </div>
   <div class="card">
     <div class="card-head">Trading Parameters</div>
     <div class="settings-grid">
@@ -1511,19 +1526,21 @@ function startDemoTicker(){
   DEMO.ticker = setInterval(()=>{
     // Always tick prices (background) — only update UI if demo tab visible
     DEMO_COINS.forEach(sym=>{
-      const coin = S.myCoins.find(c=>c.sym===sym)||{vol:5};
-      const volatility = (coin.vol||5)/100/100;
-      const drift = (Math.random()-0.48)*volatility;
-      let newPrice = DEMO.prices[sym]*(1+drift);
-      // Mean-reversion: gently pull the simulated price back toward the real live
-      // market price, so it stays realistic and never drifts far away over time.
       const live = S.prices[sym];
       if(live && live.price){
-        const pullStrength = 0.03; // 3% of the gap is closed on every tick
-        newPrice = newPrice + (live.price - newPrice) * pullStrength;
+        // Demo tracks the REAL market price so opening a demo position simulates
+        // what a real trade would do. We add only a tiny ±0.05% micro-jitter so the
+        // ticker feels alive between live-price refreshes — it never diverges from reality.
+        const jitter = (Math.random()-0.5)*0.001; // ±0.05%
+        DEMO.prices[sym] = live.price*(1+jitter);
+      } else {
+        // No live price available — fall back to a minimal random walk so the demo still ticks
+        const coin = S.myCoins.find(c=>c.sym===sym)||{vol:5};
+        const volatility = (coin.vol||5)/100/100;
+        const drift = (Math.random()-0.48)*volatility;
+        DEMO.prices[sym] = DEMO.prices[sym]*(1+drift);
       }
-      DEMO.prices[sym] = newPrice;
-      DEMO.ticks[sym].push(newPrice);
+      DEMO.ticks[sym].push(DEMO.prices[sym]);
       if(DEMO.ticks[sym].length>60) DEMO.ticks[sym].shift();
     });
     // Always check TP/SL even when tab is closed
@@ -3340,6 +3357,24 @@ function applySettings(){
   // Apply saved theme
   const saved=localStorage.getItem('cdp_theme')||'night';
   applyTheme(saved,false);
+  // Sync language button active state
+  syncLangButtons();
+}
+
+function syncLangButtons(){
+  const en=document.getElementById('lang-btn-en'), fa=document.getElementById('lang-btn-fa');
+  if(en) en.classList.toggle('active', (currentLang||'en')==='en');
+  if(fa) fa.classList.toggle('active', currentLang==='fa');
+}
+
+function switchLanguage(lang){
+  if(lang===currentLang){ return; }
+  setLang(lang);              // updates currentLang, saves, sets <html lang>, applies [data-i18n]
+  syncLangButtons();
+  // Re-render dynamic, JS-generated content so it picks up the new language
+  try{ renderAll(); }catch(e){}
+  try{ if(typeof renderDemoUI==='function') renderDemoUI(); }catch(e){}
+  toast(lang==='fa' ? 'زبان به فارسی تغییر کرد' : 'Language changed to English');
 }
 
 const THEME_CYCLE=['night','evening','day'];

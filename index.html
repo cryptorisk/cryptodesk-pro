@@ -456,7 +456,14 @@ textarea{resize:vertical;min-height:52px;font-size:12px;}
 @keyframes aiDot{0%,80%,100%{transform:scale(.6);opacity:.4;}40%{transform:scale(1);opacity:1;}}
 
 /* ── AUTH SYSTEM ── */
-#auth-screen{position:fixed;inset:0;background:var(--bg);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;}
+#auth-screen{position:fixed;inset:0;background:var(--bg);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px;}
+#auth-screen.show{display:flex;}
+#app-splash{position:fixed;inset:0;background:var(--bg);z-index:1001;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;}
+#app-splash.hide{display:none;}
+#app-splash .splash-logo{font-family:'Clash Display',sans-serif;font-size:22px;font-weight:800;letter-spacing:1px;color:var(--text);}
+#app-splash .splash-logo em{color:var(--lime);font-style:normal;}
+#app-splash .splash-spin{width:26px;height:26px;border:2.5px solid var(--border2);border-top-color:var(--lime);border-radius:50%;animation:splashSpin .7s linear infinite;}
+@keyframes splashSpin{to{transform:rotate(360deg);}}
 #auth-screen::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(198,241,53,0.06) 0%,transparent 60%);pointer-events:none;}
 .auth-box{width:100%;max-width:400px;position:relative;z-index:1;}
 .auth-logo{text-align:center;margin-bottom:28px;}
@@ -469,6 +476,8 @@ textarea{resize:vertical;min-height:52px;font-size:12px;}
 .auth-tab{flex:1;padding:8px;text-align:center;font-family:'Cabinet Grotesk',sans-serif;font-size:13px;font-weight:700;border-radius:8px;cursor:pointer;border:none;background:none;color:var(--muted);transition:all .2s;}
 .auth-tab.on{background:var(--lime);color:#000;}
 .auth-field{margin-bottom:14px;}
+.auth-remember{display:flex;align-items:center;gap:8px;margin:-4px 0 16px;cursor:pointer;font-size:12px;color:var(--muted);user-select:none;}
+.auth-remember input{width:15px;height:15px;cursor:pointer;accent-color:var(--lime);}
 .auth-field label{display:block;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;}
 .auth-field input{width:100%;background:var(--s2);border:1px solid var(--border);border-radius:9px;padding:11px 13px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;transition:border-color .2s;}
 .auth-field input:focus{border-color:var(--lime);}
@@ -523,6 +532,10 @@ textarea{resize:vertical;min-height:52px;font-size:12px;}
 </head>
 <body>
 <!-- ═══ AUTH SCREEN ═══ -->
+<div id="app-splash">
+  <div class="splash-logo">CRYPTO<em>DESK</em></div>
+  <div class="splash-spin"></div>
+</div>
 <div id="auth-screen">
   <div class="auth-box">
     <div class="auth-logo">
@@ -543,6 +556,7 @@ textarea{resize:vertical;min-height:52px;font-size:12px;}
       <div id="auth-form-login">
         <div class="auth-field"><label>Email</label><input type="email" id="login-user" placeholder="Enter your email" autocomplete="email"></div>
         <div class="auth-field"><label>Password</label><input type="password" id="login-pass" placeholder="Enter password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+        <label class="auth-remember"><input type="checkbox" id="login-remember" checked><span>Remember me</span></label>
         <button class="auth-btn" onclick="doLogin()">Sign In →</button>
       </div>
 
@@ -3821,6 +3835,7 @@ async function doSignup(){
   const lu=loginData.user;
   try{await _sb.from('profiles').upsert({uid:lu.id,name,username:user,avatar:name.charAt(0).toUpperCase()});}catch(e){}
   const profile={uid:lu.id,name,user,email,avatar:name.charAt(0).toUpperCase()};
+  try{ sessionStorage.setItem('cdp_session_only',''); }catch(e){} // remember by default after signup
   await enterApp(profile);
 }
 
@@ -3853,6 +3868,8 @@ async function doLogin(){
     }
   }catch(e){}
   const profile={uid:u.id,name,user:username,email:u.email,avatar};
+  const remember = document.getElementById('login-remember')?.checked ?? true;
+  try{ sessionStorage.setItem('cdp_session_only', remember ? '' : '1'); }catch(e){}
   await enterApp(profile);
 }
 
@@ -3872,7 +3889,8 @@ async function enterApp(user){
   else { try{const d=localStorage.getItem(dataKey);if(d){const p=JSON.parse(d);S={...S,...p};}}catch(e){} }
   updateAvatarUI(user);
   setSession(user);
-  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('auth-screen').classList.remove('show');
+  hideSplash();
   applySettings();
   renderAll();
   initDemo();
@@ -3925,8 +3943,9 @@ async function doLogout(){
   const session=getSession();
   if(session&&session.uid!=='guest') await _sb.auth.signOut();
   clearSession();
+  try{ sessionStorage.removeItem('cdp_session_only'); }catch(e){}
   S={capital:10000,trades:[],checks:{},checkItems:[...DEFAULT_CHECKS],rules:JSON.parse(JSON.stringify(DEFAULT_RULES)),settings:{...DEFAULT_SETTINGS},dir:null,pair:null,prices:{},myCoins:[...BUILTIN],marketData:[],lastMktFetch:0};
-  document.getElementById('auth-screen').style.display='flex';
+  document.getElementById('auth-screen').classList.add('show');
   ['login-user','login-pass','signup-name','signup-user','signup-email','signup-pass','signup-pass2'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('auth-err').style.display='none';
   toast('Signed out');
@@ -3960,9 +3979,32 @@ function save(){
   _sbSyncTimer=setTimeout(()=>{ sbSaveSettings(); },1200);
 }
 
+function hideSplash(){
+  const splash = document.getElementById('app-splash');
+  if(splash) splash.classList.add('hide');
+}
+
 async function authInit(){
   // Check active Supabase session first
   const{data:{session}}=await _sb.auth.getSession();
+
+  // "Remember me" enforcement: if the user unchecked it, we marked sessionStorage
+  // at login time. sessionStorage survives a page refresh but is cleared when the
+  // browser tab/app is fully closed and reopened — so its absence here (while a
+  // persisted Supabase session still exists) means the app was closed and reopened
+  // without "Remember me", so we sign the user out instead of auto-logging them in.
+  if(session&&session.user){
+    let rememberFlagPresent=false;
+    try{ rememberFlagPresent = sessionStorage.getItem('cdp_session_only')!==null; }catch(e){ rememberFlagPresent=true; }
+    if(!rememberFlagPresent){
+      // Fresh app/browser launch with a "don't remember me" session left over — sign out.
+      try{ await _sb.auth.signOut(); }catch(e){}
+      hideSplash();
+      document.getElementById('auth-screen').classList.add('show');
+      return;
+    }
+  }
+
   if(session&&session.user){
     const u=session.user;const meta=u.user_metadata||{};
     let name=meta.name||u.email, username=meta.username||u.email, avatar=(meta.name||u.email).charAt(0).toUpperCase();
@@ -3975,7 +4017,7 @@ async function authInit(){
   } else {
     const local=getSession();
     if(local&&local.uid==='guest') await enterApp(local);
-    else document.getElementById('auth-screen').style.display='flex';
+    else { document.getElementById('auth-screen').classList.add('show'); hideSplash(); }
   }
 }
 
@@ -3983,7 +4025,18 @@ function guideInit(){}
 load();
 // Apply theme immediately on load (before auth)
 (function(){const t=localStorage.getItem('cdp_theme')||'night';document.documentElement.setAttribute('data-theme',t);})();
-authInit();</script>
+
+// Safety net: if auth check hangs (slow/offline network), don't trap the user on the splash screen
+const _splashFailsafe = setTimeout(()=>{
+  const splash = document.getElementById('app-splash');
+  const authScreen = document.getElementById('auth-screen');
+  if(splash && !splash.classList.contains('hide')){
+    hideSplash();
+    if(authScreen && !authScreen.classList.contains('show')) authScreen.classList.add('show');
+  }
+},6000);
+
+authInit().finally(()=>clearTimeout(_splashFailsafe));</script>
 
 <script>
 

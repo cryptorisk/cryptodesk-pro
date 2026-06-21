@@ -1504,6 +1504,12 @@ function loadDemo(){
 
 function initDemo(){
   loadDemo();
+  // If live market prices haven't loaded yet, fetch them now so demo can use real
+  // prices immediately instead of stale defaults. When they arrive, re-sync below.
+  const haveLive = S.prices && Object.keys(S.prices).length>0 && getDemoCoins().some(s=>S.prices[s]&&S.prices[s].price);
+  if(!haveLive && typeof fetchMarket==='function'){
+    fetchMarket(false).then(()=>{ seedDemoPrices(); if(typeof renderDemoUI==='function') renderDemoUI(); }).catch(()=>{});
+  }
   seedDemoPrices();
   if(!DEMO.running) startDemoTicker();
   renderDemoUI();
@@ -1514,8 +1520,14 @@ function initDemo(){
 function seedDemoPrices(){
   DEMO_COINS.forEach(sym=>{
     const live = S.prices[sym];
-    const base = live&&live.price ? live.price : {BTC:67000,ETH:3200,SOL:145,BNB:580,AVAX:38}[sym]||100;
-    if(!DEMO.prices[sym]) DEMO.prices[sym] = base;
+    const hasOpenPos = DEMO.positions && DEMO.positions.some(p=>p.sym===sym);
+    if(live && live.price){
+      // Live price available: snap to it (unless an open position would be distorted)
+      if(!DEMO.prices[sym] || !hasOpenPos) DEMO.prices[sym] = live.price;
+    } else if(!DEMO.prices[sym]){
+      // No live price yet and nothing seeded — use a sensible default to start
+      DEMO.prices[sym] = {BTC:67000,ETH:3200,SOL:145,BNB:580,AVAX:38}[sym]||100;
+    }
     if(!DEMO.ticks[sym]||DEMO.ticks[sym].length<2){
       DEMO.ticks[sym] = Array.from({length:40},(_,i)=>{
         const noise=(Math.random()-0.5)*0.012;
@@ -2105,6 +2117,16 @@ async function fetchMarket(force){
       const f=S.marketData.find(d=>d.sym===mc.sym);
       if(f)S.prices[mc.sym]={price:f.price,chg:f.chg,vol:f.vol,low24:f.low24,high24:f.high24};
     });
+    // Re-sync demo prices now that real live prices are available, so coins with
+    // no open position snap to the real market price instead of stale defaults.
+    if(typeof DEMO!=='undefined' && DEMO.prices){
+      (typeof getDemoCoins==='function'?getDemoCoins():[]).forEach(sym=>{
+        const live=S.prices[sym];
+        const hasOpenPos=DEMO.positions&&DEMO.positions.some(p=>p.sym===sym);
+        if(!hasOpenPos && live && live.price) DEMO.prices[sym]=live.price;
+      });
+      try{ if(typeof renderDemoUI==='function'){ const d=document.getElementById('tb-demo'); if(d&&d.style.display!=='none') renderDemoUI(); } }catch(e){}
+    }
     save();renderMarketTable();renderMyCoins();renderPricesTab();renderDailyPlan();
     const el=document.getElementById('mkt-updated');if(el)el.textContent='Updated '+new Date().toLocaleTimeString();
   }catch(e){

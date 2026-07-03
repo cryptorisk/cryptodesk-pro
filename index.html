@@ -2974,6 +2974,29 @@ function candleFeatures(candles){
   return `24h:${chg(day.c,last.c)} 3d:${chg(threeDay.c,last.c)} HH:${hh}/7 LL:${ll}/7 volTrend:${vPrev>0?(vRecent/vPrev).toFixed(2)+'x':'n/a'} range:[${Math.min(...ks.slice(-12).map(k=>k.l)).toFixed(2)}-${Math.max(...ks.slice(-12).map(k=>k.h)).toFixed(2)}]`;
 }
 
+// Robustly extract a JSON array from an LLM reply: strips code fences and prose,
+// tolerates trailing commas, and salvages complete objects from a truncated array.
+function parseRecoJSON(raw){
+  let s=(raw||'').replace(/```[a-zA-Z]*\n?/g,'').replace(/```/g,'').trim();
+  const tryParse=t=>{ try{ const v=JSON.parse(t); return Array.isArray(v)?v:null; }catch(e){ return null; } };
+  let v=tryParse(s); if(v) return v;
+  // Cut to the outermost [ ... ]
+  const a=s.indexOf('['), b=s.lastIndexOf(']');
+  if(a>-1&&b>a){ v=tryParse(s.slice(a,b+1)); if(v) return v;
+    v=tryParse(s.slice(a,b+1).replace(/,\s*([\]}])/g,'$1')); if(v) return v; }
+  // Truncated array: salvage the complete {...} objects one by one
+  if(a>-1){
+    const objs=[]; let depth=0,start=-1;
+    for(let i=a;i<s.length;i++){
+      const ch=s[i];
+      if(ch==='{'){ if(depth===0)start=i; depth++; }
+      else if(ch==='}'){ depth--; if(depth===0&&start>-1){ try{ objs.push(JSON.parse(s.slice(start,i+1))); }catch(e){} start=-1; } }
+    }
+    if(objs.length) return objs;
+  }
+  return null;
+}
+
 async function runAIRecommendations(manual){
   if(_recoBusy) return;
   const el=document.getElementById('ai-reco-body');if(!el)return;
@@ -2993,7 +3016,7 @@ async function runAIRecommendations(manual){
 
 DATA: ${JSON.stringify(coins)}
 
-Respond ONLY with a JSON array (no markdown, no backticks, no extra text). For each coin output: {"sym":"BTC","action":"LONG"|"SHORT"|"WAIT","confidence":0-100,"reason":"max 15 words, specific to the data"}. Order by confidence descending. Be conservative: only give LONG/SHORT with confidence >= 60 when data clearly supports it, otherwise WAIT.`;
+CRITICAL OUTPUT RULES: Your ENTIRE response must be a raw JSON array and nothing else. Start with [ and end with ]. No markdown, no backticks, no explanations, no disclaimers (the app already shows a not-financial-advice notice). No trailing commas. Format per coin: {"sym":"BTC","action":"LONG"|"SHORT"|"WAIT","confidence":0-100,"reason":"max 15 words, specific to the data"}. Order by confidence descending. Be conservative: only give LONG/SHORT with confidence >= 60 when data clearly supports it, otherwise WAIT.`;
 
   try{
     const resp=await fetch(AI_FUNCTION_URL,{
@@ -3003,10 +3026,12 @@ Respond ONLY with a JSON array (no markdown, no backticks, no extra text). For e
     });
     const data=await resp.json();
     if(!resp.ok||data.error) throw new Error(data.error||('HTTP '+resp.status));
-    let recos;
-    try{ recos=JSON.parse((data.reply||'').replace(/```json|```/g,'').trim()); }
-    catch(e){ throw new Error('Could not parse AI response'); }
-    if(!Array.isArray(recos)||!recos.length) throw new Error('Empty analysis');
+    let recos = parseRecoJSON(data.reply||'');
+    if(!Array.isArray(recos)||!recos.length){
+      console.warn('AI reco raw reply:', data.reply);
+      const peek=(data.reply||'').trim().slice(0,90);
+      throw new Error('AI reply was not valid JSON'+(peek?(' — starts with: "'+peek.replace(/</g,'')+'…"'):''));
+    }
     recos=recos.filter(r=>r&&r.sym&&r.action).slice(0,10);
     localStorage.setItem('cdp_reco_cache',JSON.stringify({recos,at:Date.now()}));
     renderRecoList(recos,Date.now());

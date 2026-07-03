@@ -109,6 +109,8 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .field-hint{font-size:10px;color:var(--muted);line-height:1.4;margin-top:-1px;}
 .lang-opt-btn{flex:1;padding:12px;background:var(--s2);border:1.5px solid var(--border2);border-radius:10px;color:var(--text);font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;font-family:'Cabinet Grotesk',sans-serif;}
 .lang-opt-btn.active{border-color:var(--lime);background:rgba(198,241,53,0.1);color:var(--lime);}
+.reco-scope-btn{flex:1;padding:8px 10px;background:var(--s2);border:1.5px solid var(--border);border-radius:10px;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;font-family:'Cabinet Grotesk',sans-serif;}
+.reco-scope-btn.active{border-color:var(--lime);background:rgba(198,241,53,0.1);color:var(--lime);}
 html[lang="fa"] .lang-opt-btn{font-family:'Vazirmatn',sans-serif;}
 label{font-size:9px;font-weight:700;color:var(--muted);letter-spacing:2px;text-transform:uppercase;}
 input,select,textarea{background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:9px 11px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;transition:border-color .2s;width:100%;}
@@ -926,9 +928,13 @@ function applyTranslations(){
       <button id="reco-notif-btn" title="Notify me on strong signals" onclick="toggleRecoNotif()" style="margin-left:auto;padding:5px 10px;font-size:13px;background:var(--s2);border:1px solid var(--border);border-radius:8px;cursor:pointer;">🔕</button>
       <button class="btn-lime" style="margin-left:6px;padding:5px 12px;font-size:11px;" onclick="runAIRecommendations(true)">✨ Analyze</button>
     </div>
-    <div style="font-size:10px;color:var(--muted);margin-bottom:10px;">Live market data + technical signals analyzed by AI · Educational only — not financial advice</div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:8px;">Live market data + technical signals analyzed by AI · Educational only — not financial advice</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      <button id="reco-scope-top100" class="reco-scope-btn" onclick="setRecoScope('top100')">🔍 Top 100 Scan <span style="font-size:9px;opacity:.7;">85%+ only</span></button>
+      <button id="reco-scope-mycoins" class="reco-scope-btn" onclick="setRecoScope('mycoins')">⭐ My Coins</button>
+    </div>
     <div id="ai-reco-body">
-      <div class="empty" style="padding:14px 0;"><div class="ei" style="font-size:22px;">🤖</div>Tap Analyze — AI will review your coins and suggest the best setups</div>
+      <div class="empty" style="padding:14px 0;"><div class="ei" style="font-size:22px;">🤖</div>Tap Analyze — AI will review the market and surface the best setups</div>
     </div>
   </div>
 </div>
@@ -2904,13 +2910,52 @@ function loadAIForUnified(sym,coin,p){
 let _recoNotif = localStorage.getItem('cdp_reco_notif')==='1';
 let _recoBusy = false;
 
+let _recoScope = localStorage.getItem('cdp_reco_scope')||'top100';
+
+function setRecoScope(s){
+  _recoScope=s; localStorage.setItem('cdp_reco_scope',s);
+  syncRecoScopeBtns();
+  // Show this scope's cached result (if fresh), else the invite state
+  const el=document.getElementById('ai-reco-body');
+  try{
+    const cached=JSON.parse(localStorage.getItem('cdp_reco_cache_'+s)||'null');
+    if(cached&&cached.recos&&(Date.now()-cached.at)<10*60*1000){ renderRecoList(cached.recos,cached.at,cached.meta); return; }
+  }catch(e){}
+  if(el) el.innerHTML='<div class="empty" style="padding:14px 0;"><div class="ei" style="font-size:22px;">🤖</div>'+(s==='top100'?'Tap Analyze — scans the top 100 market coins and shows only 85%+ conviction setups':'Tap Analyze — AI will review your coins and suggest the best setups')+'</div>';
+}
+
+function syncRecoScopeBtns(){
+  const t=document.getElementById('reco-scope-top100'), m=document.getElementById('reco-scope-mycoins');
+  if(t) t.classList.toggle('active',_recoScope==='top100');
+  if(m) m.classList.toggle('active',_recoScope==='mycoins');
+}
+
+// Pre-screen the top-100 market list locally: score directional momentum and
+// return the strongest ~15 candidates (keeps the AI prompt small and focused).
+function gatherTop100Candidates(){
+  const md=S.marketData||[];
+  const scored=md.map(d=>{
+    if(!d||!d.sym||!d.price) return null;
+    const chg24=parseFloat(d.chg)||0;
+    let trend7=0;
+    if(d.spark&&d.spark.length>1){ trend7=(d.spark[d.spark.length-1]-d.spark[0])/d.spark[0]*100; }
+    // Directional score: strong 24h move + strong 7d trend, bonus when aligned
+    const aligned=(chg24>=0)===(trend7>=0)?1.35:1;
+    const score=(Math.abs(chg24)*1.6+Math.abs(trend7)*0.9)*aligned;
+    return {sym:d.sym, price:d.price, chg24:chg24.toFixed(2)+'%', trend7:(trend7>=0?'+':'')+trend7.toFixed(1)+'%', _score:score};
+  }).filter(Boolean);
+  scored.sort((a,b)=>b._score-a._score);
+  return scored.slice(0,15).map(({_score,...rest})=>rest);
+}
+
 function initAIReco(){
   syncRecoNotifBtn();
-  // Show cached result if fresh (< 10 min), otherwise leave the invite state
+  syncRecoScopeBtns();
+  // Show this scope's cached result if fresh (< 10 min), otherwise leave the invite state
   try{
-    const cached = JSON.parse(localStorage.getItem('cdp_reco_cache')||'null');
+    const cached = JSON.parse(localStorage.getItem('cdp_reco_cache_'+_recoScope)||'null');
     if(cached && cached.recos && (Date.now()-cached.at) < 10*60*1000){
-      renderRecoList(cached.recos, cached.at);
+      renderRecoList(cached.recos, cached.at, cached.meta);
     }
   }catch(e){}
 }
@@ -3029,23 +3074,45 @@ function parseRecoProse(raw, syms){
 async function runAIRecommendations(manual){
   if(_recoBusy) return;
   const el=document.getElementById('ai-reco-body');if(!el)return;
-  const coins=gatherRecoData();
-  if(!coins.length){ el.innerHTML='<div class="empty" style="padding:14px 0;"><div class="ei">📡</div>No live prices yet — open the Coins tab first or wait a moment</div>'; return; }
+  const top100=_recoScope==='top100';
   _recoBusy=true;
-  el.innerHTML='<div style="text-align:center;padding:22px 0;color:var(--muted);font-size:12px;"><div style="font-size:24px;margin-bottom:8px;animation:pulse 1.2s infinite;">🤖</div>Fetching real exchange candles + analyzing '+coins.length+' coins…</div>';
 
-  // Enrich each coin with real 4H candle features from Crypto.com (best-effort, parallel)
+  let coins, scanned=0;
+  if(top100){
+    // Make sure the top-100 market list is loaded, then pre-screen locally
+    if(!(S.marketData&&S.marketData.length)){
+      el.innerHTML='<div style="text-align:center;padding:22px 0;color:var(--muted);font-size:12px;"><div style="font-size:24px;margin-bottom:8px;animation:pulse 1.2s infinite;">📡</div>Loading market list…</div>';
+      try{ await fetchMarket(true); }catch(e){}
+    }
+    scanned=(S.marketData||[]).length;
+    coins=gatherTop100Candidates();
+    if(!coins.length){ el.innerHTML='<div class="empty" style="padding:14px 0;"><div class="ei">📡</div>Market list unavailable — check connection and retry</div>'; _recoBusy=false; return; }
+  } else {
+    coins=gatherRecoData();
+    if(!coins.length){ el.innerHTML='<div class="empty" style="padding:14px 0;"><div class="ei">📡</div>No live prices yet — open the Coins tab first or wait a moment</div>'; _recoBusy=false; return; }
+  }
+
+  el.innerHTML='<div style="text-align:center;padding:22px 0;color:var(--muted);font-size:12px;"><div style="font-size:24px;margin-bottom:8px;animation:pulse 1.2s infinite;">🤖</div>'+(top100?('Scanned '+scanned+' coins → analyzing '+coins.length+' strongest movers with real exchange candles…'):('Fetching real exchange candles + analyzing '+coins.length+' coins…'))+'</div>';
+
+  // Enrich each candidate with real 4H candle features from Crypto.com (best-effort, parallel)
   let usedExchange=false;
   try{
     const feats=await Promise.all(coins.map(co=>cdcCandles(co.sym,'4h')));
     feats.forEach((f,i)=>{ const cf=candleFeatures(f); if(cf){ coins[i].candles4h=cf; usedExchange=true; } });
   }catch(e){}
 
-  const prompt = `You are a crypto futures analyst. Analyze these coins using the provided LIVE data: price, 24h change, 7-day trend, technical indicator verdict with buy/sell signal counts${usedExchange?', and REAL 4H exchange candle features (candles4h: 24h/3d change, higher-high & lower-low counts out of last 7 candles, volume trend ratio, 12-candle price range)':''}. The user trades with ${S.settings.risk}% risk per trade targeting ${S.settings.move}% moves.
+  const dataDesc = `price, 24h change, 7-day trend${top100?'':', technical indicator verdict with buy/sell signal counts'}${usedExchange?', and REAL 4H exchange candle features (candles4h: 24h/3d change, higher-high & lower-low counts out of last 7 candles, volume trend ratio, 12-candle price range)':''}`;
+  const task = top100
+    ? `These ${coins.length} coins are the strongest pre-screened movers out of the top ${scanned||100} by market cap. Identify ONLY coins with a HIGH-CONVICTION setup: probability >= 85% for a LONG or SHORT. Be extremely strict — 85%+ setups are rare; if none qualify, return an empty array []. Never output WAIT entries.`
+    : `Analyze every coin. Be conservative: only give LONG/SHORT with confidence >= 60 when data clearly supports it, otherwise WAIT.`;
+
+  const prompt = `You are a crypto futures analyst. Analyze these coins using the provided LIVE data: ${dataDesc}. The user trades with ${S.settings.risk}% risk per trade targeting ${S.settings.move}% moves.
 
 DATA: ${JSON.stringify(coins)}
 
-CRITICAL OUTPUT RULES: Your ENTIRE response must be a raw JSON array and nothing else. Start with [ and end with ]. No markdown, no backticks, no explanations, no disclaimers (the app already shows a not-financial-advice notice). No trailing commas. Format per coin: {"sym":"BTC","action":"LONG"|"SHORT"|"WAIT","confidence":0-100,"reason":"max 15 words, specific to the data"}. Order by confidence descending. Be conservative: only give LONG/SHORT with confidence >= 60 when data clearly supports it, otherwise WAIT.`;
+TASK: ${task}
+
+CRITICAL OUTPUT RULES: Your ENTIRE response must be a raw JSON array and nothing else. Start with [ and end with ]. No markdown, no backticks, no explanations, no disclaimers (the app already shows a not-financial-advice notice). No trailing commas. Format per coin: {"sym":"BTC","action":"LONG"|"SHORT"${top100?'':'|"WAIT"'},"confidence":0-100,"reason":"max 15 words, specific to the data"}. Order by confidence descending.`;
 
   try{
     const resp=await fetch(AI_FUNCTION_URL,{
@@ -3056,17 +3123,27 @@ CRITICAL OUTPUT RULES: Your ENTIRE response must be a raw JSON array and nothing
     const data=await resp.json();
     if(!resp.ok||data.error) throw new Error(data.error||('HTTP '+resp.status));
     let recos = parseRecoJSON(data.reply||'');
-    if(!Array.isArray(recos)||!recos.length){
+    if(!Array.isArray(recos)){
       recos = parseRecoProse(data.reply||'', coins.map(co=>co.sym));
     }
-    if(!Array.isArray(recos)||!recos.length){
-      console.warn('AI reco raw reply:', data.reply);
-      const peek=(data.reply||'').trim().slice(0,90);
-      throw new Error('AI reply was not valid JSON'+(peek?(' — starts with: "'+peek.replace(/</g,'')+'…"'):''));
+    if(!Array.isArray(recos)){
+      // In top100 mode an empty reply body is a legitimate "nothing qualifies"
+      const bare=(data.reply||'').trim();
+      if(top100&&(bare===''||bare==='[]')) recos=[];
+      else{
+        console.warn('AI reco raw reply:', data.reply);
+        const peek=bare.slice(0,90);
+        throw new Error('AI reply was not valid JSON'+(peek?(' — starts with: "'+peek.replace(/</g,'')+'…"'):''));
+      }
     }
-    recos=recos.filter(r=>r&&r.sym&&r.action).slice(0,10);
-    localStorage.setItem('cdp_reco_cache',JSON.stringify({recos,at:Date.now()}));
-    renderRecoList(recos,Date.now());
+    recos=(recos||[]).filter(r=>r&&r.sym&&r.action).slice(0,10);
+    if(top100){
+      // Enforce the 85% bar and no-WAIT client-side too
+      recos=recos.filter(r=>r.action!=='WAIT'&&(r.confidence||0)>=85);
+    }
+    const meta={scope:_recoScope, scanned:top100?scanned:coins.length, candidates:coins.length};
+    localStorage.setItem('cdp_reco_cache_'+_recoScope,JSON.stringify({recos,at:Date.now(),meta}));
+    renderRecoList(recos,Date.now(),meta);
     // Notify on strong actionable signals
     if(_recoNotif && 'Notification' in window && Notification.permission==='granted'){
       recos.filter(r=>r.action!=='WAIT'&&(r.confidence||0)>=70).slice(0,3).forEach(r=>{
@@ -3087,14 +3164,21 @@ function recoOpenAnalysis(sym){
   if(hub) hub.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
-function renderRecoList(recos, at){
+function renderRecoList(recos, at, meta){
   const el=document.getElementById('ai-reco-body');if(!el)return;
   const ago=Math.max(0,Math.round((Date.now()-at)/60000));
+  const agoTxt=ago===0?'just now':ago+' min ago';
+  const isTop=meta&&meta.scope==='top100';
+  const scanLine=isTop?`<div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:8px;">🔍 Scanned ${meta.scanned} coins → ${meta.candidates} strongest analyzed → ${recos.length} high-conviction · ${agoTxt}</div>`:'';
+  if(isTop&&!recos.length){
+    el.innerHTML=scanLine+`<div class="empty" style="padding:16px 0;"><div class="ei" style="font-size:22px;">🧘</div>No 85%+ conviction setups in the market right now<br><span style="font-size:10px;line-height:1.6;">That's normal — high-conviction setups are rare. Patience beats forced trades. Try again in a few hours.</span></div>`;
+    return;
+  }
   const cls=a=>a==='LONG'?'var(--lime)':a==='SHORT'?'var(--red)':'var(--muted)';
   const bg=a=>a==='LONG'?'rgba(198,241,53,0.12)':a==='SHORT'?'rgba(255,61,90,0.12)':'rgba(255,255,255,0.05)';
   const icon=a=>a==='LONG'?'📈':a==='SHORT'?'📉':'⏸';
   el.innerHTML =
-    `<div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:8px;">Updated ${ago===0?'just now':ago+' min ago'}</div>`+
+    (isTop?scanLine:`<div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:8px;">Updated ${agoTxt}</div>`)+
     recos.map(r=>{
       const conf=Math.max(0,Math.min(100,r.confidence||0));
       const price=S.prices[r.sym]&&S.prices[r.sym].price;

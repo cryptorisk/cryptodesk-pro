@@ -1493,6 +1493,8 @@ function loadDemo(){
 
 function initDemo(){
   loadDemo();
+  // Kick off an immediate real-exchange price refresh (async, best-effort)
+  cdcRefreshDemoPrices().then(()=>{ seedDemoPrices(); const d=document.getElementById('tb-demo'); if(d&&d.style.display!=='none') renderDemoUI(); }).catch(()=>{});
   // If live market prices haven't loaded yet, fetch them now so demo can use real
   // prices immediately instead of stale defaults. When they arrive, re-sync below.
   const haveLive = S.prices && Object.keys(S.prices).length>0 && getDemoCoins().some(s=>S.prices[s]&&S.prices[s].price);
@@ -1530,11 +1532,77 @@ function seedDemoPrices(){
   });
 }
 
+// ══════════════════════════════════════
+// CDC — Crypto.com Exchange public data (real-time prices & real candles).
+// Free public API, no key needed. Falls back to CoinGecko data silently on
+// any failure (CORS/network/unsupported coin) so nothing ever breaks.
+// ══════════════════════════════════════
+const CDC_BASE='https://api.crypto.com/exchange/v1/public';
+const CDC={unsupported:new Set(), lastPoll:0, live:false};
+
+async function cdcFetch(path){
+  const r=await fetch(CDC_BASE+path,{method:'GET'});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const j=await r.json();
+  if(j.code!==0&&j.code!==undefined&&j.code!==null) throw new Error('API code '+j.code);
+  return (j.result&&j.result.data)||j.data||[];
+}
+
+async function cdcTicker(sym){
+  if(CDC.unsupported.has(sym)) return null;
+  try{
+    const d=await cdcFetch('/get-tickers?instrument_name='+sym+'_USDT');
+    const t=Array.isArray(d)?d[0]:d;
+    if(!t||!t.a&&!t.last) { CDC.unsupported.add(sym); return null; }
+    // API fields: a=last, c=24h change(fraction), h/l=24h high/low (docs) — support both raw and MCP-style names
+    const price=parseFloat(t.a??t.last), chgF=parseFloat(t.c??t.change);
+    const high=parseFloat(t.h??t.high), low=parseFloat(t.l??t.low);
+    if(!isFinite(price)) { CDC.unsupported.add(sym); return null; }
+    return {price, chg:isFinite(chgF)?chgF*100:undefined, high24:isFinite(high)?high:undefined, low24:isFinite(low)?low:undefined};
+  }catch(e){ return null; }
+}
+
+async function cdcCandles(sym, tf){
+  if(CDC.unsupported.has(sym)) return null;
+  try{
+    const d=await cdcFetch('/get-candlestick?instrument_name='+sym+'_USDT&timeframe='+(tf||'4h'));
+    if(!Array.isArray(d)||!d.length) return null;
+    // Normalize: fields o,h,l,c,v,t (raw) or open/high/low/close/volume/timestamp (gateway)
+    return d.map(k=>({
+      o:parseFloat(k.o??k.open), h:parseFloat(k.h??k.high), l:parseFloat(k.l??k.low),
+      c:parseFloat(k.c??k.close), v:parseFloat(k.v??k.volume), t:k.t??k.timestamp
+    })).filter(k=>isFinite(k.c));
+  }catch(e){ return null; }
+}
+
+// Poll real exchange prices for the demo coins (called from the demo ticker every ~5s)
+async function cdcRefreshDemoPrices(){
+  const now=Date.now();
+  if(now-CDC.lastPoll<4500) return; // throttle
+  CDC.lastPoll=now;
+  const syms=getDemoCoins();
+  const results=await Promise.all(syms.map(s=>cdcTicker(s)));
+  let any=false;
+  results.forEach((t,i)=>{
+    if(t&&t.price){
+      const sym=syms[i];
+      const prev=S.prices[sym]||{};
+      S.prices[sym]={...prev, price:t.price, chg:(t.chg!==undefined?t.chg:prev.chg), high24:t.high24??prev.high24, low24:t.low24??prev.low24};
+      any=true;
+    }
+  });
+  CDC.live=any;
+  const dot=document.getElementById('demo-src-dot');
+  if(dot){ dot.textContent=any?'🟢 Exchange live':'🟡 CoinGecko'; dot.style.color=any?'var(--lime)':'var(--yellow)'; }
+}
+
 function startDemoTicker(){
   seedDemoPrices();
   if(DEMO.ticker){ clearInterval(DEMO.ticker); } // defensive: never stack intervals
   DEMO.running = true;
   DEMO.ticker = setInterval(()=>{
+    // Refresh real exchange prices in the background (throttled inside)
+    cdcRefreshDemoPrices();
     // Always tick prices (background) — only update UI if demo tab visible
     DEMO_COINS.forEach(sym=>{
       const live = S.prices[sym];
@@ -1874,7 +1942,7 @@ function renderDemoUI(){
 
     <!-- LIVE PRICE TILES -->
     <div class="card">
-      <div class="card-head"><span class="demo-tick-dot"></span>&nbsp;Live Prices <span style="font-size:9px;color:var(--muted);margin-left:4px;font-family:'DM Mono',monospace;">ticking every 1.2s</span></div>
+      <div class="card-head"><span class="demo-tick-dot"></span>&nbsp;Live Prices <span style="font-size:9px;color:var(--muted);margin-left:4px;font-family:'DM Mono',monospace;">ticking every 1.2s</span><span id="demo-src-dot" style="margin-left:auto;font-size:9px;font-family:'DM Mono',monospace;color:${CDC.live?'var(--lime)':'var(--yellow)'};">${CDC.live?'🟢 Exchange live':'🟡 CoinGecko'}</span></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:7px;" id="demo-coin-grid">${coinBtns}</div>
     </div>
 
@@ -2889,15 +2957,39 @@ function gatherRecoData(){
   }).filter(Boolean);
 }
 
+// Summarize real 4H exchange candles into compact features the AI can reason about
+function candleFeatures(candles){
+  if(!candles||candles.length<8) return null;
+  // API returns newest-first; work oldest→newest
+  const ks=[...candles].reverse();
+  const n=ks.length;
+  const last=ks[n-1], day=ks[Math.max(0,n-7)], threeDay=ks[Math.max(0,n-19)];
+  const chg=(a,b)=>((b-a)/a*100).toFixed(1)+'%';
+  // Structure: count higher-highs & lower-lows over last 8 candles
+  let hh=0,ll=0;
+  for(let i=n-7;i<n;i++){ if(ks[i].h>ks[i-1].h)hh++; if(ks[i].l<ks[i-1].l)ll++; }
+  // Volume trend: last 4 vs previous 4
+  const vSum=(a,b)=>ks.slice(a,b).reduce((s,k)=>s+(k.v||0),0);
+  const vRecent=vSum(n-4,n), vPrev=vSum(n-8,n-4);
+  return `24h:${chg(day.c,last.c)} 3d:${chg(threeDay.c,last.c)} HH:${hh}/7 LL:${ll}/7 volTrend:${vPrev>0?(vRecent/vPrev).toFixed(2)+'x':'n/a'} range:[${Math.min(...ks.slice(-12).map(k=>k.l)).toFixed(2)}-${Math.max(...ks.slice(-12).map(k=>k.h)).toFixed(2)}]`;
+}
+
 async function runAIRecommendations(manual){
   if(_recoBusy) return;
   const el=document.getElementById('ai-reco-body');if(!el)return;
   const coins=gatherRecoData();
   if(!coins.length){ el.innerHTML='<div class="empty" style="padding:14px 0;"><div class="ei">📡</div>No live prices yet — open the Coins tab first or wait a moment</div>'; return; }
   _recoBusy=true;
-  el.innerHTML='<div style="text-align:center;padding:22px 0;color:var(--muted);font-size:12px;"><div style="font-size:24px;margin-bottom:8px;animation:pulse 1.2s infinite;">🤖</div>Analyzing '+coins.length+' coins with live data + technicals…</div>';
+  el.innerHTML='<div style="text-align:center;padding:22px 0;color:var(--muted);font-size:12px;"><div style="font-size:24px;margin-bottom:8px;animation:pulse 1.2s infinite;">🤖</div>Fetching real exchange candles + analyzing '+coins.length+' coins…</div>';
 
-  const prompt = `You are a crypto futures analyst. Analyze these coins using the provided LIVE data (price, 24h change, 7-day trend, technical indicator verdict and buy/sell signal counts). The user trades with ${S.settings.risk}% risk per trade targeting ${S.settings.move}% moves.
+  // Enrich each coin with real 4H candle features from Crypto.com (best-effort, parallel)
+  let usedExchange=false;
+  try{
+    const feats=await Promise.all(coins.map(co=>cdcCandles(co.sym,'4h')));
+    feats.forEach((f,i)=>{ const cf=candleFeatures(f); if(cf){ coins[i].candles4h=cf; usedExchange=true; } });
+  }catch(e){}
+
+  const prompt = `You are a crypto futures analyst. Analyze these coins using the provided LIVE data: price, 24h change, 7-day trend, technical indicator verdict with buy/sell signal counts${usedExchange?', and REAL 4H exchange candle features (candles4h: 24h/3d change, higher-high & lower-low counts out of last 7 candles, volume trend ratio, 12-candle price range)':''}. The user trades with ${S.settings.risk}% risk per trade targeting ${S.settings.move}% moves.
 
 DATA: ${JSON.stringify(coins)}
 

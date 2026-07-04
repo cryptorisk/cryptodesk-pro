@@ -1588,24 +1588,59 @@ async function cdcCandles(sym, tf){
 }
 
 // Poll real exchange prices for the demo coins (called from the demo ticker every ~5s)
+// ── Binance public ticker (no key, CORS-open, real-time; this is effectively the
+// CoinMarketCap reference price since CMC's aggregate is dominated by Binance) ──
+const BNC={unsupported:new Set(), backoffUntil:0};
+async function bncTicker(sym){
+  if(BNC.unsupported.has(sym)) return null;
+  try{
+    const r=await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol='+sym+'USDT');
+    if(r.status===400||r.status===404){ BNC.unsupported.add(sym); return null; }
+    if(!r.ok) return null; // 451 geo-block / 429 etc → try next source, don't blacklist
+    const t=await r.json();
+    const price=parseFloat(t.lastPrice), chg=parseFloat(t.priceChangePercent);
+    if(!isFinite(price)) { BNC.unsupported.add(sym); return null; }
+    return {price, chg:isFinite(chg)?chg:undefined, high24:parseFloat(t.highPrice)||undefined, low24:parseFloat(t.lowPrice)||undefined};
+  }catch(e){ return null; }
+}
+
+// Multi-source refresh: Binance first (CMC-reference prices), Crypto.com for the
+// rest, CoinGecko (fetchMarket) remains the last resort. Never throws.
 async function cdcRefreshDemoPrices(){
   const now=Date.now();
-  if(now-CDC.lastPoll<4500) return; // throttle
+  if(now-CDC.lastPoll<2800) return; // throttle ~3s
   CDC.lastPoll=now;
   const syms=getDemoCoins();
-  const results=await Promise.all(syms.map(s=>cdcTicker(s)));
-  let any=false;
-  results.forEach((t,i)=>{
-    if(t&&t.price){
-      const sym=syms[i];
-      const prev=S.prices[sym]||{};
-      S.prices[sym]={...prev, price:t.price, chg:(t.chg!==undefined?t.chg:prev.chg), high24:t.high24??prev.high24, low24:t.low24??prev.low24};
-      any=true;
-    }
+  const srcBy={};
+  // Tier 1: Binance (parallel per coin) — skipped while in backoff (e.g. geo-blocked)
+  let missing=[...syms];
+  if(Date.now()>BNC.backoffUntil){
+    const bnc=await Promise.all(syms.map(s=>bncTicker(s)));
+    missing=[];
+    bnc.forEach((t,i)=>{ if(t&&t.price) srcBy[syms[i]]={t,src:'binance'}; else missing.push(syms[i]); });
+    // Circuit breaker: an entire round with zero successes means Binance is
+    // unreachable here (geo-block/network) — pause trying it for 5 minutes.
+    if(missing.length===syms.length && syms.length>0) BNC.backoffUntil=Date.now()+5*60*1000;
+  }
+  // Tier 2: Crypto.com for whatever Binance couldn't give
+  if(missing.length){
+    const cdc=await Promise.all(missing.map(s=>cdcTicker(s)));
+    cdc.forEach((t,i)=>{ if(t&&t.price) srcBy[missing[i]]={t,src:'cdc'}; });
+  }
+  let nBnc=0,nCdc=0;
+  Object.keys(srcBy).forEach(sym=>{
+    const {t,src}=srcBy[sym];
+    const prev=S.prices[sym]||{};
+    S.prices[sym]={...prev, price:t.price, chg:(t.chg!==undefined?t.chg:prev.chg), high24:t.high24??prev.high24, low24:t.low24??prev.low24};
+    if(src==='binance')nBnc++;else nCdc++;
   });
-  CDC.live=any;
+  CDC.live=(nBnc+nCdc)>0;
   const dot=document.getElementById('demo-src-dot');
-  if(dot){ dot.textContent=any?'🟢 Exchange live':'🟡 CoinGecko'; dot.style.color=any?'var(--lime)':'var(--yellow)'; }
+  if(dot){
+    const label=nBnc>0?'🟢 Binance live':(nCdc>0?'🟢 Exchange live':'🟡 CoinGecko');
+    dot.textContent=label;
+    dot.style.color=(nBnc+nCdc)>0?'var(--lime)':'var(--yellow)';
+  }
 }
 
 function startDemoTicker(){
@@ -1952,7 +1987,7 @@ function renderDemoUI(){
 
     <!-- LIVE PRICE TILES -->
     <div class="card">
-      <div class="card-head"><span class="demo-tick-dot"></span>&nbsp;Live Prices <span style="font-size:9px;color:var(--muted);margin-left:4px;font-family:'DM Mono',monospace;">ticking every 1.2s</span><span id="demo-src-dot" style="margin-left:auto;font-size:9px;font-family:'DM Mono',monospace;color:${CDC.live?'var(--lime)':'var(--yellow)'};">${CDC.live?'🟢 Exchange live':'🟡 CoinGecko'}</span></div>
+      <div class="card-head"><span class="demo-tick-dot"></span>&nbsp;Live Prices <span style="font-size:9px;color:var(--muted);margin-left:4px;font-family:'DM Mono',monospace;">ticking every 1.2s</span><span id="demo-src-dot" style="margin-left:auto;font-size:9px;font-family:'DM Mono',monospace;color:${CDC.live?'var(--lime)':'var(--yellow)'};">${CDC.live?'🟢 Live':'🟡 Connecting…'}</span></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:7px;" id="demo-coin-grid">${coinBtns}</div>
     </div>
 
